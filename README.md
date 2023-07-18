@@ -1,32 +1,30 @@
-# stats-gl
+# 🎛️ stats-gl
+[![Version](https://img.shields.io/npm/v/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
+[![Downloads](https://img.shields.io/npm/dw/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
 
-stats-gl is a simple, yet powerful JavaScript library designed to help you monitor and visualize your web application's performance in real-time. The library provides panels that display Frames per Second (FPS), Central Processing Unit (CPU) usage, and if supported, Graphics Processing Unit (GPU) usage.
+WebGL Performance Monitor tool.
 
-Note: GPU Monitoring will be available on Safari after the v17 release.
+[![stats renaudrohlinger com](https://github.com/RenaudRohlinger/stats-gl/assets/15867665/a564a6fd-63b8-490d-ad21-760271ebe5d9)](https://stats.renaudrohlinger.com/)
 
-## Table of Contents
-- [Description](#description)
-- [Installation](#installation)
-- [Example Usage](#example-usage)
-- [Parameters](#parameters)
-- [Contributing](#contributing)
-- [License](#license)
+🔗 [Live Demo](https://stats.renaudrohlinger.com/)
 
-## Description
+### ❗📢 Note: GPU Monitoring will be available on Safari after the v17 release.
 
-The Stats class exposes methods to create performance panels, log performance metrics, and manage the display and layout of these panels. The performance metrics are logged for FPS CPU and GPU. The GPU logging is only available if the user's browser supports the WebGL 2.0 `EXT_disjoint_timer_query_webgl2` extension.
+## 📚 Description
+
+`stats-gl` is a comprehensive tool to monitor WebGL performance. The Stats class provides methods to create performance panels, log performance metrics, and manage the display and layout of these panels. The performance metrics logged include FPS, CPU, and GPU. The GPU logging is available only if the user's browser supports the WebGL 2.0 `EXT_disjoint_timer_query_webgl2` extension.
 
 In addition to logging real-time performance data, the class also provides methods to calculate and display average performance metrics over a specified interval.
 
-## Installation
+## ⬇️ Installation
 
-Stats.js is available as an npm package. You can install it using the following command:
+Stats-gl is available as an npm package. You can install it using the following command:
 
 ```bash
 npm install stats-gl
 ```
 
-## Example Usage
+## 🧑‍💻 Example Usage
 
 Below is an example of how you can use this class in your code:
 ```js
@@ -52,24 +50,61 @@ stats.begin();
 stats.end();
 ```
 
-## Parameters
+
+Quick start with threejs:
+```js
+import * as THREE from 'three';
+
+import Stats from 'https://www.unpkg.com/stats-gl';
+
+const container = document.getElementById( 'container' );
+
+const stats = new Stats();
+container.appendChild( stats.container );
+
+const renderer = new THREE.WebGLRenderer( { antialias: true } );
+container.appendChild( renderer.domElement );
+
+const scene = new THREE.Scene();
+
+stats.init( renderer.domElement );
+
+scene.onBeforeRender = function () {
+
+    stats.begin();
+
+};
+
+scene.onAfterRender = function () {
+
+    stats.end();
+
+};
+```
+
+
+## ⚙️ Parameters
 The constructor for the Stats class accepts an options object with the following properties:
 
-- logsPerSecond: How often to log performance data, in logs per second.
-- samplesLog: Number of recent log samples to keep for computing averages.
-- samplesGraph: Number of recent graph samples to keep for computing averages.
-- precision: Precision of the data, in number of decimal places.
-- minimal: A boolean value to control the minimalistic mode of the panel display. If set to true, a simple click on the panel will switch between different metrics.
-- mode: Sets the initial panel to display - 0 for FPS, 1 for CPU, and 2 for GPU (if supported).
+- `logsPerSecond`: How often to log performance data, in logs per second.
+- `samplesLog`: Number of recent log samples to keep for computing averages.
+- `samplesGraph`: Number of recent graph samples to keep for computing averages.
+- `precision`: Precision of the data, in number of decimal places (only affects CPU and GPU).
+- `minimal`: A boolean value to control the minimalistic mode of the panel display. If set to true, a simple click on the panel will switch between different metrics.
+- `mode`: Sets the initial panel to display - 0 for FPS, 1 for CPU, and 2 for GPU (if supported).
 
 All the parameters are optional and have default values. The class also provides other methods such as begin(), end(), init(canvas), etc. which can be used based on the requirement.
 
-Note: The init(canvas) method is used to start the GPU monitoring and must be called with a canvas context before begin().
 
-## Contributing
-We welcome contributions to Stats.js. Before contributing, please read our contributing guidelines and code of conduct.
+## 🤝 Contributing
+Contributions to Stats-gl are welcome.
 
 Please report any issues or bugs you encounter.
 
-## License
+## 📜 License
 This project is licensed under the MIT License.
+
+## 🧑‍🎨 Maintainers :
+
+- [`twitter 🐈‍⬛ @onirenaud`](https://twitter.com/onirenaud)
+- [`twitter @utsuboco`](https://twitter.com/utsuboco)
