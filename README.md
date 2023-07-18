@@ -6,7 +6,8 @@ WebGL Performance Monitor tool.
 
 🔗 [Live Demo](https://stats.renaudrohlinger.com/)
 
-[![stats renaudrohlinger com](https://github.com/RenaudRohlinger/stats-gl/assets/15867665/a564a6fd-63b8-490d-ad21-760271ebe5d9)](https://stats.renaudrohlinger.com/)
+
+https://github.com/RenaudRohlinger/stats-gl/assets/15867665/3fdafff4-1357-4872-9baf-0629dbaf9d8c
 
 
 ### ❗📢 Note: GPU Monitoring will be available on Safari after the v17 release.
