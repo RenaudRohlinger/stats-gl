@@ -1,5 +1,11 @@
 import Panel from "./panel";
 
+export interface AverageArray {
+  logs: number[];
+  graph: number[];
+}
+
+
 class Stats {
   mode: number;
   container: HTMLDivElement;
@@ -7,9 +13,9 @@ class Stats {
   beginTime: number;
   prevTime: any;
   frames: number;
-  averageCpu: { logs: number[]; graph: number[]; };
-  averageGpu: { logs: number[]; graph: number[]; };
-  averageFps: { logs: number[]; graph: number[]; };
+  averageCpu: AverageArray;
+  averageGpu: AverageArray;
+  averageFps: AverageArray;
   queryCreated: boolean;
   fpsPanel: Panel;
   static Panel: any;
@@ -86,14 +92,18 @@ class Stats {
 
   addPanel(panel: Panel) {
 
-    if(panel.dom) {
+    if(panel.canvas) {
 
-      this.container.appendChild(panel.dom);
+      this.container.appendChild(panel.canvas);
     
       if ( this.minimal ) {
 
-        panel.dom.style.display = 'none';
+        panel.canvas.style.display = 'none';
 
+      } else {
+
+        panel.canvas.style.display = 'block';
+        panel.canvas.style.left = ( this.container.children.length - 1 ) * panel.WIDTH + 'px';
       }
 
     }
@@ -210,6 +220,7 @@ class Stats {
 
       this.addToAverage( fps, this.averageFps );
 
+      console.log(this.averageFps)
       this.updatePanel( this.fpsPanel, this.averageFps );
 
       this.prevTime = time;
@@ -306,5 +317,6 @@ class Stats {
 
 }
 
+Stats.Panel = Panel
 
 export default Stats;

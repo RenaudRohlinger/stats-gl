@@ -3,9 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "main": "./dist/stats-gl.umd.cjs",
   "module": "./dist/stats-gl.js",
+  "types": "./dist/stats-gl.d.ts",
   "exports": {
     ".": {
       "import": "./dist/stats-gl.js",
@@ -14,10 +17,13 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && rollup -c",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "rollup": "^3.26.3",
+    "rollup-plugin-dts": "^5.3.0",
+    "three": "^0.154.0",
     "typescript": "^5.0.2",
     "vite": "^4.4.0"
   }

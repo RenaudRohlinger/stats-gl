@@ -1,5 +1,4 @@
 class Panel {
-    dom: HTMLCanvasElement | null;
     canvas: HTMLCanvasElement;
     context: CanvasRenderingContext2D | null;
     name: string;
@@ -17,7 +16,6 @@ class Panel {
 
     constructor(name: string, fg: string, bg: string) {
 
-        this.dom = null;
         this.name = name;
         this.fg = fg;
         this.bg = bg;
@@ -67,7 +65,7 @@ class Panel {
         this.context.globalAlpha = 1;
         this.context.fillRect(0, 0, this.WIDTH, this.GRAPH_Y);
         this.context.fillStyle = this.fg;
-        this.context.fillText(parseFloat(value.toFixed(decimals)) + ' ' + this.name + ' (' + parseFloat(min.toFixed(decimals)) + '-' + parseFloat(max.toFixed(decimals)) + ')', this.TEXT_X, this.TEXT_Y);
+        this.context.fillText(value.toFixed(decimals) + ' ' + this.name + ' (' + min.toFixed(decimals) + '-' + parseFloat(max.toFixed(decimals)) + ')', this.TEXT_X, this.TEXT_Y);
 
         this.context.drawImage(this.canvas, this.GRAPH_X + this.PR, this.GRAPH_Y, this.GRAPH_WIDTH - this.PR, this.GRAPH_HEIGHT, this.GRAPH_X, this.GRAPH_Y, this.GRAPH_WIDTH - this.PR, this.GRAPH_HEIGHT);
 

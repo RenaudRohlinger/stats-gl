@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+
     "target": "ES2020",
     "useDefineForClassFields": true,
     "module": "ESNext",
@@ -10,16 +11,17 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+
+    /* Emit options */
     "declaration": true,
-    "declarationDir": "./dist/types",
-    "declarationMap": true,
-    "noEmitOnError": true
+    "outDir": "dist",
+    "declarationDir": "./dist"
   },
-  "include": ["./lib/**/*.ts"],
-  "exclude": ["./**/dist"]
+  "include": ["lib/**/*"]
 }
