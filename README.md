@@ -2,6 +2,8 @@
 
 stats-gl is a simple, yet powerful JavaScript library designed to help you monitor and visualize your web application's performance in real-time. The library provides panels that display Frames per Second (FPS), Central Processing Unit (CPU) usage, and if supported, Graphics Processing Unit (GPU) usage.
 
+Note: GPU Monitoring will be available on Safari after the v17 release.
+
 ## Table of Contents
 - [Description](#description)
 - [Installation](#installation)
