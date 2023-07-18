@@ -16,7 +16,8 @@
     }
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "vite demo",
+    "serve": "vite serve demo",
     "build": "tsc && vite build && rollup -c",
     "preview": "vite preview"
   },

@@ -136,7 +136,7 @@ scene.onAfterRender = <span class="keyword">function</span> () {
 
 		<script type="module">
 
-      import Stats from './lib/main.ts'
+      import Stats from '../dist/stats-gl.es.js'
       import * as THREE from 'three';
   
    
@@ -190,14 +190,14 @@ scene.onAfterRender = <span class="keyword">function</span> () {
       controls.enableDamping = true;
   
       const dracoLoader = new DRACOLoader();
-      dracoLoader.setDecoderPath( './demo/draco/gltf/' );
+      dracoLoader.setDecoderPath( './draco/gltf/' );
   
   
       // scene.overrideChildren = [];
       
       const loader = new GLTFLoader();
       loader.setDRACOLoader( dracoLoader );
-      loader.load( './demo/LittlestTokyo.glb', function ( gltf ) {
+      loader.load( './LittlestTokyo.glb', function ( gltf ) {
   
         const model = gltf.scene;
         model.position.set( 1, 1, 0 );
