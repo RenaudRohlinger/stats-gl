@@ -17,7 +17,7 @@ class p {
     s(this, "GRAPH_Y");
     s(this, "GRAPH_WIDTH");
     s(this, "GRAPH_HEIGHT");
-    this.name = t, this.fg = i, this.bg = h, this.PR = 1, this.WIDTH = 90 * this.PR, this.HEIGHT = 48 * this.PR, this.TEXT_X = 3 * this.PR, this.TEXT_Y = 2 * this.PR, this.GRAPH_X = 3 * this.PR, this.GRAPH_Y = 15 * this.PR, this.GRAPH_WIDTH = 84 * this.PR, this.GRAPH_HEIGHT = 30 * this.PR, this.canvas = document.createElement("canvas"), this.canvas.width = this.WIDTH, this.canvas.height = this.HEIGHT, this.canvas.style.cssText = `width:${this.WIDTH}px;height:${this.HEIGHT}px`, this.context = this.canvas.getContext("2d"), this.context && (this.context.font = "bold " + 9 * this.PR + "px Helvetica,Arial,sans-serif", this.context.textBaseline = "top", this.context.fillStyle = this.bg, this.context.fillRect(0, 0, this.WIDTH, this.HEIGHT), this.context.fillStyle = this.fg, this.context.fillText(this.name, this.TEXT_X, this.TEXT_Y), this.context.fillRect(this.GRAPH_X, this.GRAPH_Y, this.GRAPH_WIDTH, this.GRAPH_HEIGHT), this.context.fillStyle = this.bg, this.context.globalAlpha = 0.9, this.context.fillRect(this.GRAPH_X, this.GRAPH_Y, this.GRAPH_WIDTH, this.GRAPH_HEIGHT));
+    this.name = t, this.fg = i, this.bg = h, this.PR = Math.round(window.devicePixelRatio || 1), this.WIDTH = 90 * this.PR, this.HEIGHT = 48 * this.PR, this.TEXT_X = 3 * this.PR, this.TEXT_Y = 2 * this.PR, this.GRAPH_X = 3 * this.PR, this.GRAPH_Y = 15 * this.PR, this.GRAPH_WIDTH = 84 * this.PR, this.GRAPH_HEIGHT = 30 * this.PR, this.canvas = document.createElement("canvas"), this.canvas.width = 90 * this.PR, this.canvas.height = 48 * this.PR, this.canvas.style.width = "90px", this.canvas.style.height = "48px", this.canvas.style.cssText = "width:90px;height:48px", this.context = this.canvas.getContext("2d"), this.context && (this.context.font = "bold " + 9 * this.PR + "px Helvetica,Arial,sans-serif", this.context.textBaseline = "top", this.context.fillStyle = this.bg, this.context.fillRect(0, 0, this.WIDTH, this.HEIGHT), this.context.fillStyle = this.fg, this.context.fillText(this.name, this.TEXT_X, this.TEXT_Y), this.context.fillRect(this.GRAPH_X, this.GRAPH_Y, this.GRAPH_WIDTH, this.GRAPH_HEIGHT), this.context.fillStyle = this.bg, this.context.globalAlpha = 0.9, this.context.fillRect(this.GRAPH_X, this.GRAPH_Y, this.GRAPH_WIDTH, this.GRAPH_HEIGHT));
   }
   update(t, i, h, l, n = 0) {
     let a = 1 / 0, e = 0;
@@ -62,7 +62,7 @@ const r = class r {
     });
   }
   resizePanel(t, i) {
-    this.minimal ? t.canvas.style.display = "none" : (t.canvas.style.display = "block", window.innerWidth < 700 ? (t.canvas.style.left = "0px", t.canvas.style.top = i * t.HEIGHT + "px") : (t.canvas.style.top = "0px", t.canvas.style.left = i * t.WIDTH + "px"));
+    this.minimal ? t.canvas.style.display = "none" : (t.canvas.style.display = "block", window.innerWidth < 700 ? (t.canvas.style.left = "0px", t.canvas.style.top = i * t.HEIGHT / t.PR + "px") : (t.canvas.style.top = "0px", t.canvas.style.left = i * t.WIDTH / t.PR + "px"));
   }
   addPanel(t, i) {
     return t.canvas && (this.container.appendChild(t.canvas), this.resizePanel(t, i)), t;

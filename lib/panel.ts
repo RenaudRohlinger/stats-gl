@@ -19,7 +19,8 @@ class Panel {
         this.name = name;
         this.fg = fg;
         this.bg = bg;
-        this.PR = 1;
+        this.PR = Math.round( window.devicePixelRatio || 1 );
+        
         this.WIDTH = 90 * this.PR;
         this.HEIGHT = 48 * this.PR;
         this.TEXT_X = 3 * this.PR;
@@ -30,9 +31,11 @@ class Panel {
         this.GRAPH_HEIGHT = 30 * this.PR;
 
         this.canvas = document.createElement('canvas');
-        this.canvas.width = this.WIDTH;
-        this.canvas.height = this.HEIGHT;
-        this.canvas.style.cssText = `width:${this.WIDTH}px;height:${this.HEIGHT}px`;
+        this.canvas.width = 90 * this.PR;
+        this.canvas.height = 48 * this.PR;
+        this.canvas.style.width = '90px';
+        this.canvas.style.height = '48px';
+        this.canvas.style.cssText = 'width:90px;height:48px';
 
         this.context = this.canvas.getContext('2d');
 

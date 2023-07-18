@@ -112,11 +112,11 @@ class Stats {
       panel.canvas.style.display = 'block';
       if (window.innerWidth < 700) {
         panel.canvas.style.left = '0px';
-        panel.canvas.style.top = offset * panel.HEIGHT + 'px';
+        panel.canvas.style.top = offset * panel.HEIGHT / panel.PR  + 'px';
 
       } else {
         panel.canvas.style.top = '0px';
-        panel.canvas.style.left = offset * panel.WIDTH + 'px';
+        panel.canvas.style.left = offset * panel.WIDTH / panel.PR + 'px';
       }
     }
   }
