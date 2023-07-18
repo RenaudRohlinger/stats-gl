@@ -1,12 +1,13 @@
-# 🎛️ stats-gl
+# 📈 stats-gl
 [![Version](https://img.shields.io/npm/v/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
 [![Downloads](https://img.shields.io/npm/dw/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
 
 WebGL Performance Monitor tool.
 
+🔗 [Live Demo](https://stats.renaudrohlinger.com/)
+
 [![stats renaudrohlinger com](https://github.com/RenaudRohlinger/stats-gl/assets/15867665/a564a6fd-63b8-490d-ad21-760271ebe5d9)](https://stats.renaudrohlinger.com/)
 
-🔗 [Live Demo](https://stats.renaudrohlinger.com/)
 
 ### ❗📢 Note: GPU Monitoring will be available on Safari after the v17 release.
 
