@@ -1,6 +1,5 @@
 # 📈 stats-gl
 [![Version](https://img.shields.io/npm/v/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
-[![Downloads](https://img.shields.io/npm/dw/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
 
 WebGL Performance Monitor tool.
 
