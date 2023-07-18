@@ -19,7 +19,7 @@ class Panel {
         this.name = name;
         this.fg = fg;
         this.bg = bg;
-        this.PR = Math.round(window.devicePixelRatio || 1);
+        this.PR = 1;
         this.WIDTH = 90 * this.PR;
         this.HEIGHT = 48 * this.PR;
         this.TEXT_X = 3 * this.PR;
@@ -37,20 +37,21 @@ class Panel {
         this.context = this.canvas.getContext('2d');
 
         if (this.context) {
-        this.context.font = 'bold ' + (9 * this.PR) + 'px Helvetica,Arial,sans-serif';
-        this.context.textBaseline = 'top';
+            this.context.font = 'bold ' + (9 * this.PR) + 'px Helvetica,Arial,sans-serif';
+            this.context.textBaseline = 'top';
 
-        this.context.fillStyle = this.bg;
-        this.context.fillRect(0, 0, this.WIDTH, this.HEIGHT);
+            this.context.fillStyle = this.bg;
+            this.context.fillRect(0, 0, this.WIDTH, this.HEIGHT);
 
-        this.context.fillStyle = this.fg;
-        this.context.fillText(this.name, this.TEXT_X, this.TEXT_Y);
-        this.context.fillRect(this.GRAPH_X, this.GRAPH_Y, this.GRAPH_WIDTH, this.GRAPH_HEIGHT);
+            this.context.fillStyle = this.fg;
+            this.context.fillText(this.name, this.TEXT_X, this.TEXT_Y);
+            this.context.fillRect(this.GRAPH_X, this.GRAPH_Y, this.GRAPH_WIDTH, this.GRAPH_HEIGHT);
 
-        this.context.fillStyle = this.bg;
-        this.context.globalAlpha = 0.9;
-        this.context.fillRect(this.GRAPH_X, this.GRAPH_Y, this.GRAPH_WIDTH, this.GRAPH_HEIGHT);
+            this.context.fillStyle = this.bg;
+            this.context.globalAlpha = 0.9;
+            this.context.fillRect(this.GRAPH_X, this.GRAPH_Y, this.GRAPH_WIDTH, this.GRAPH_HEIGHT);
         }
+
     }
 
     update(value: number, valueGraph: number, maxValue: number, maxGraph: number, decimals = 0) {
@@ -60,6 +61,7 @@ class Panel {
 
         min = Math.min(min, value);
         max = Math.max(maxValue, value);
+        maxGraph = Math.max(maxGraph, valueGraph);
 
         this.context.fillStyle = this.bg;
         this.context.globalAlpha = 1;

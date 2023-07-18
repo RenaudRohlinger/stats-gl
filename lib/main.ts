@@ -11,11 +11,11 @@ class Stats {
   container: HTMLDivElement;
   minimal: boolean;
   beginTime: number;
-  prevTime: any;
+  prevTime: number;
+  prevCpuTime: number;
   frames: number;
   averageCpu: AverageArray;
   averageGpu: AverageArray;
-  averageFps: AverageArray;
   queryCreated: boolean;
   fpsPanel: Panel;
   static Panel: any;
@@ -23,6 +23,7 @@ class Stats {
   gpuPanel: Panel | null;
   samplesLog: number;
   samplesGraph: number;
+  logsPerSecond: number;
   precision: number;
   canvasGpu: HTMLCanvasElement | null;
   gl: WebGL2RenderingContext | null;
@@ -31,9 +32,9 @@ class Stats {
   disjoint: any;
   ns: any;
 
-  constructor( { samplesLog = 100, samplesGraph = 10, precision = 2, minimal = false } = {} ) {
+  constructor( { logsPerSecond = 20, samplesLog = 100, samplesGraph = 10, precision = 2, minimal = false, mode = 0 } = {} ) {
 
-    this.mode = 0;
+    this.mode = mode;
     this.container = document.createElement( 'div' );
     this.container.style.cssText = 'position:fixed;top:0;left:0;opacity:0.9;z-index:10000;';
 
@@ -51,6 +52,7 @@ class Stats {
 
     this.beginTime = ( performance || Date ).now();
     this.prevTime = this.beginTime;
+    this.prevCpuTime = this.beginTime;
     this.frames = 0;
     this.averageCpu = {
       logs: [],
@@ -60,20 +62,17 @@ class Stats {
       logs: [],
       graph: []
     };
-    this.averageFps = {
-      logs: [],
-      graph: []
-    };
 
     this.queryCreated = false;
 
-    this.fpsPanel = this.addPanel( new Stats.Panel( 'FPS', '#0ff', '#002' ) );
-    this.msPanel = this.addPanel( new Stats.Panel( 'CPU', '#0f0', '#020' ) );
+    this.fpsPanel = this.addPanel( new Stats.Panel( 'FPS', '#0ff', '#002' ), 0 );
+    this.msPanel = this.addPanel( new Stats.Panel( 'CPU', '#0f0', '#020' ), 1 );
     this.gpuPanel = null;
 
     this.samplesLog = samplesLog;
     this.samplesGraph = samplesGraph;
     this.precision = precision;
+    this.logsPerSecond = logsPerSecond;
 
     if ( this.minimal ) {
 
@@ -83,28 +82,52 @@ class Stats {
         this.showPanel( ++ this.mode % this.container.children.length );
 
       }, false );
-      this.mode = 0;
+
+      this.mode = mode;
       this.showPanel( this.mode );
 
+    } else {
+
+      window.addEventListener('resize', () =>{
+        
+        this.resizePanel( this.fpsPanel, 0 );
+        this.resizePanel( this.msPanel, 1 );
+  
+        if (this.gpuPanel) {
+          this.resizePanel( this.gpuPanel, 2 );
+        }
+      })
     }
 
   }
 
-  addPanel(panel: Panel) {
+  resizePanel( panel: Panel, offset: number) {
+
+    if ( this.minimal ) {
+
+      panel.canvas.style.display = 'none';
+
+    } else {
+
+      panel.canvas.style.display = 'block';
+      if (window.innerWidth < 700) {
+        panel.canvas.style.left = '0px';
+        panel.canvas.style.top = offset * panel.HEIGHT + 'px';
+
+      } else {
+        panel.canvas.style.top = '0px';
+        panel.canvas.style.left = offset * panel.WIDTH + 'px';
+      }
+    }
+  }
+    
+  addPanel(panel: Panel, offset: number) {
 
     if(panel.canvas) {
 
       this.container.appendChild(panel.canvas);
     
-      if ( this.minimal ) {
-
-        panel.canvas.style.display = 'none';
-
-      } else {
-
-        panel.canvas.style.display = 'block';
-        panel.canvas.style.left = ( this.container.children.length - 1 ) * panel.WIDTH + 'px';
-      }
+      this.resizePanel(panel, offset);
 
     }
 
@@ -125,13 +148,7 @@ class Stats {
 
   }
 
-  begin() {
-
-    this.beginTime = ( performance || Date ).now();
-
-  }
-
-  initGpu( canvas: any ) {
+  init( canvas: any ) {
 
     this.canvasGpu = canvas;
     if ( ! this.canvasGpu ) return;
@@ -139,13 +156,13 @@ class Stats {
     this.ext = this.gl ? this.gl.getExtension( 'EXT_disjoint_timer_query_webgl2' ) : null;
     if ( this.ext ) {
 
-      this.gpuPanel = this.addPanel( new Stats.Panel( 'GPU', '#ff0', '#220' ) );
+      this.gpuPanel = this.addPanel( new Stats.Panel( 'GPU', '#ff0', '#220' ), 2 );
 
     }
 
   }
 
-  startGpu() {
+  begin() {
 
     this.beginProfiling( 'cpu-started' );
     if ( ! this.gl || ! this.ext ) return;
@@ -191,7 +208,9 @@ class Stats {
 
   }
 
-  endGpu() {
+  end() {
+
+    this.beginTime = this.endInternal()
 
     this.endProfiling( 'cpu-started', 'cpu-finished', 'cpu-duration', this.averageCpu );
 
@@ -204,24 +223,26 @@ class Stats {
 
     }
 
+
   }
 
-  end() {
+  endInternal() {
 
     this.frames ++;
     const time = ( performance || Date ).now();
 
-    this.updatePanel( this.msPanel, this.averageCpu );
-    this.updatePanel( this.gpuPanel, this.averageGpu );
+    if (time >= this.prevCpuTime + 1000 / this.logsPerSecond) {
+      this.updatePanel( this.msPanel, this.averageCpu );
+      this.updatePanel( this.gpuPanel, this.averageGpu );
+
+      this.prevCpuTime = time;
+    }
 
     if ( time >= this.prevTime + 1000 ) {
 
       const fps = ( this.frames * 1000 ) / ( time - this.prevTime );
 
-      this.addToAverage( fps, this.averageFps );
-
-      console.log(this.averageFps)
-      this.updatePanel( this.fpsPanel, this.averageFps );
+      this.fpsPanel.update(fps, fps, 100, 100, 0);
 
       this.prevTime = time;
       this.frames = 0;
@@ -229,12 +250,6 @@ class Stats {
     }
 
     return time;
-
-  }
-
-  update() {
-
-    this.beginTime = this.end();
 
   }
 
@@ -308,7 +323,7 @@ class Stats {
       }
 
       if (panel) {
-        panel.update(sumLog / this.samplesLog, sumGraph / this.samplesGraph, max, maxGraph, this.precision);
+        panel.update(sumLog / Math.min(averageArray.logs.length,this.samplesLog), sumGraph / Math.min(averageArray.graph.length,this.samplesGraph), max, maxGraph, this.precision);
       }
 
     }
