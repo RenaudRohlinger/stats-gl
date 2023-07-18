@@ -1,15 +1,25 @@
 import { resolve } from 'path'
 import { defineConfig } from 'vite'
 
+const entries = ['./lib/main.ts']
+
 export default defineConfig({
   build: {
+    minify: false,
+    sourcemap: true,
+    target: 'es2018',
     lib: {
-      entry: resolve(__dirname, 'lib/main.ts'),
-      name: 'Stats-Gl',
-      fileName: (format) => `stats-gl.${format}.js`,
+      formats: ['es', 'cjs'],
+      entry: entries[0],
+      fileName: '[name]',
     },
     rollupOptions: {
-      output: {},
+      treeshake: false,
+      output: {
+        preserveModules: true,
+        preserveModulesRoot: 'src',
+        sourcemapExcludeSources: true,
+      },
     },
   },
 })

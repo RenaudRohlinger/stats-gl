@@ -1,19 +1,31 @@
 {
   "name": "stats-gl",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "type": "module",
+  "author": "Renaud ROHLINGER (https://github.com/RenaudRohlinger)",
+  "homepage": "https://github.com/RenaudRohlinger/stats-gl",
+  "repository": "https://github.com/RenaudRohlinger/stats-gl",
+  "license": "MIT",
   "files": [
-    "dist"
+    "dist/*",
+    "lib/*"
   ],
-  "main": "./dist/stats-gl.umd.cjs",
-  "module": "./dist/stats-gl.js",
   "types": "./dist/stats-gl.d.ts",
+  "main": "./dist/main.js",
+  "module": "./dist/main.mjs",
   "exports": {
     ".": {
-      "import": "./dist/stats-gl.js",
-      "require": "./dist/stats-gl.umd.cjs"
+      "types": "./dist/main.d.ts",
+      "require": "./dist/main.js",
+      "import": "./dist/main.mjs"
+    },
+    "./panel": {
+      "types": "./dist/panel.d.ts",
+      "require": "./dist/panel.js",
+      "import": "./dist/panel.mjs"
     }
   },
+  "sideEffects": false,
   "scripts": {
     "dev": "vite demo",
     "serve": "vite serve demo",
