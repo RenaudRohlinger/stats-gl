@@ -144,7 +144,7 @@ scene.onAfterRender = <span class="keyword">function</span> () {
     
 		<script type="module">
 
-      import Stats from '../dist/stats-gl.es.js'
+      import Stats from './stats-gl.es.js'
       import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
 
       import { OrbitControls } from 'https://unpkg.com/three@0.154.0/examples/jsm/controls/OrbitControls.js';
@@ -196,7 +196,7 @@ scene.onAfterRender = <span class="keyword">function</span> () {
       controls.enableDamping = true;
   
       const dracoLoader = new DRACOLoader();
-      dracoLoader.setDecoderPath( './draco/gltf/' );
+      dracoLoader.setDecoderPath( 'https://unpkg.com/three@0.154.0/examples/jsm/libs/draco/gltf/' );
   
   
       // scene.overrideChildren = [];
