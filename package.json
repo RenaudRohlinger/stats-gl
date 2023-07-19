@@ -1,6 +1,6 @@
 {
   "name": "stats-gl",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "author": "Renaud ROHLINGER (https://github.com/RenaudRohlinger)",
   "homepage": "https://github.com/RenaudRohlinger/stats-gl",
@@ -11,8 +11,8 @@
     "lib/*"
   ],
   "types": "./dist/stats-gl.d.ts",
-  "main": "./dist/main.js",
-  "module": "./dist/main.cjs",
+  "main": "./dist/main.cjs",
+  "module": "./dist/main.js",
   "exports": {
     ".": {
       "types": "./dist/main.d.ts",
