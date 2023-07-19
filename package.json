@@ -1,6 +1,6 @@
 {
   "name": "stats-gl",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "type": "module",
   "author": "Renaud ROHLINGER (https://github.com/RenaudRohlinger)",
   "homepage": "https://github.com/RenaudRohlinger/stats-gl",
@@ -12,17 +12,17 @@
   ],
   "types": "./dist/stats-gl.d.ts",
   "main": "./dist/main.js",
-  "module": "./dist/main.mjs",
+  "module": "./dist/main.cjs",
   "exports": {
     ".": {
       "types": "./dist/main.d.ts",
-      "require": "./dist/main.js",
-      "import": "./dist/main.mjs"
+      "require": "./dist/main.cjs",
+      "import": "./dist/main.js"
     },
     "./panel": {
       "types": "./dist/panel.d.ts",
-      "require": "./dist/panel.js",
-      "import": "./dist/panel.mjs"
+      "require": "./dist/panel.cjs",
+      "import": "./dist/panel.js"
     }
   },
   "sideEffects": false,
