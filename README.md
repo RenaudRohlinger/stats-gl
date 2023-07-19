@@ -37,6 +37,7 @@ const stats = new Stats({
     samplesLog: 100, 
     samplesGraph: 10, 
     precision: 2, 
+    horizontal: true,
     minimal: false, 
     mode: 0 
 });
@@ -93,6 +94,7 @@ The constructor for the Stats class accepts an options object with the following
 - `precision`: Precision of the data, in number of decimal places (only affects CPU and GPU).
 - `minimal`: A boolean value to control the minimalistic mode of the panel display. If set to true, a simple click on the panel will switch between different metrics.
 - `mode`: Sets the initial panel to display - 0 for FPS, 1 for CPU, and 2 for GPU (if supported).
+- `horizontal`: Display the canvases on the X axis, set to align on vertical axis.
 
 All the parameters are optional and have default values. The class also provides other methods such as begin(), end(), init(canvas), etc. which can be used based on the requirement.
 

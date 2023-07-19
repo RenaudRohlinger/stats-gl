@@ -78,7 +78,8 @@ class Panel {
 
         this.context.fillStyle = this.bg;
         this.context.globalAlpha = 0.9;
-        this.context.fillRect(this.GRAPH_X + this.GRAPH_WIDTH - this.PR, this.GRAPH_Y, this.PR, parseFloat((1 - (valueGraph / maxGraph)).toFixed(decimals)) * this.GRAPH_HEIGHT);
+
+        this.context.fillRect(this.GRAPH_X + this.GRAPH_WIDTH - this.PR, this.GRAPH_Y, this.PR, ((1 - (valueGraph / maxGraph))) * this.GRAPH_HEIGHT);
     }
 };
 

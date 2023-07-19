@@ -10,6 +10,7 @@ class Stats {
   mode: number;
   container: HTMLDivElement;
   minimal: boolean;
+  horizontal: boolean;
   beginTime: number;
   prevTime: number;
   prevCpuTime: number;
@@ -32,9 +33,10 @@ class Stats {
   disjoint: any;
   ns: any;
 
-  constructor( { logsPerSecond = 20, samplesLog = 100, samplesGraph = 10, precision = 2, minimal = false, mode = 0 } = {} ) {
+  constructor( { logsPerSecond = 20, samplesLog = 100, samplesGraph = 10, precision = 2, minimal = false, horizontal = true, mode = 0 } = {} ) {
 
     this.mode = mode;
+    this.horizontal = horizontal;
     this.container = document.createElement( 'div' );
     this.container.style.cssText = 'position:fixed;top:0;left:0;opacity:0.9;z-index:10000;';
 
@@ -110,13 +112,13 @@ class Stats {
     } else {
 
       panel.canvas.style.display = 'block';
-      if (window.innerWidth < 700) {
+      if (this.horizontal) {
+        panel.canvas.style.top = '0px';
+        panel.canvas.style.left = offset * panel.WIDTH / panel.PR + 'px';
+      } else {
         panel.canvas.style.left = '0px';
         panel.canvas.style.top = offset * panel.HEIGHT / panel.PR  + 'px';
 
-      } else {
-        panel.canvas.style.top = '0px';
-        panel.canvas.style.left = offset * panel.WIDTH / panel.PR + 'px';
       }
     }
   }
