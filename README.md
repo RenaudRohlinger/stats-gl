@@ -57,7 +57,8 @@ Quick start with threejs:
 ```js
 import * as THREE from 'three';
 
-import Stats from 'https://www.unpkg.com/stats-gl';
+// use esm module instead of cjs
+import Stats from 'https://www.unpkg.com/stats-gl?module';
 
 const container = document.getElementById( 'container' );
 
