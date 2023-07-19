@@ -105,6 +105,8 @@ class Stats {
 
   resizePanel( panel: Panel, offset: number) {
 
+    panel.canvas.style.position = 'absolute';
+
     if ( this.minimal ) {
 
       panel.canvas.style.display = 'none';

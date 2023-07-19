@@ -34,6 +34,7 @@ class Panel {
         this.canvas.width = 90 * this.PR;
         this.canvas.height = 48 * this.PR;
         this.canvas.style.width = '90px';
+        this.canvas.style.position = 'absolute';
         this.canvas.style.height = '48px';
         this.canvas.style.cssText = 'width:90px;height:48px';
 
