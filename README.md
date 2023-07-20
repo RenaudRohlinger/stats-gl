@@ -1,5 +1,6 @@
 # 📈 stats-gl
 [![Version](https://img.shields.io/npm/v/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
+[![Version](https://img.shields.io/npm/dw/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
 
 WebGL Performance Monitor tool.
 
@@ -84,7 +85,17 @@ scene.onAfterRender = function () {
 
 };
 ```
+Quick start with [@react-three/fiber](https://github.com/pmndrs/fiber). A `<StatsGl />` component is avaible through [@react-three/drei](https://github.com/pmndrs/drei):
+```jsx
+import { Canvas } from '@react-three/fiber'
+import { StatsGl } from '@react-three/drei'
 
+const Scene = () => (
+    <Canvas>
+        <StatsGl />
+    </Canvas>
+)
+```
 
 ## ⚙️ Parameters
 The constructor for the Stats class accepts an options object with the following properties:
