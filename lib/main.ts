@@ -19,7 +19,7 @@ class Stats {
   averageGpu: AverageArray;
   queryCreated: boolean;
   fpsPanel: Panel;
-  static Panel: any;
+  static Panel: typeof Panel = Panel;
   msPanel: Panel;
   gpuPanel: Panel | null;
   samplesLog: number;
@@ -336,6 +336,5 @@ class Stats {
 
 }
 
-Stats.Panel = Panel
 
 export default Stats;

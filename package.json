@@ -18,11 +18,6 @@
       "types": "./dist/stats-gl.d.ts",
       "require": "./dist/main.cjs",
       "import": "./dist/main.js"
-    },
-    "./panel": {
-      "types": "./dist/stats-gl.d.ts",
-      "require": "./dist/panel.cjs",
-      "import": "./dist/panel.js"
     }
   },
   "sideEffects": false,
