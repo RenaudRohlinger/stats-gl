@@ -15,12 +15,12 @@
   "module": "./dist/main.js",
   "exports": {
     ".": {
-      "types": "./dist/main.d.ts",
+      "types": "./dist/stats-gl.d.ts",
       "require": "./dist/main.cjs",
       "import": "./dist/main.js"
     },
     "./panel": {
-      "types": "./dist/panel.d.ts",
+      "types": "./dist/stats-gl.d.ts",
       "require": "./dist/panel.cjs",
       "import": "./dist/panel.js"
     }
