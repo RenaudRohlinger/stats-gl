@@ -1,3 +1,4 @@
+import { FBOPanel } from "./fbopanel";
 import Panel from "./panel";
 
 export interface AverageArray {
@@ -8,6 +9,8 @@ export interface AverageArray {
 
 class Stats {
   mode: number;
+  panelOffset: number;
+  plugins: StatsPlugin[];
   container: HTMLDivElement;
   minimal: boolean;
   horizontal: boolean;
@@ -28,13 +31,19 @@ class Stats {
   precision: number;
   canvasGpu: HTMLCanvasElement | null;
   gl: WebGL2RenderingContext | null;
-  ext: any;
-  query: WebGLQuery | null;
-  disjoint: any;
-  ns: any;
+  private ext: any;
+  private query: WebGLQuery | null;
+  private disjoint: any;
+  private ns: any;
+  private panels: Panel[];
+  disabled: boolean;
 
-  constructor( { logsPerSecond = 20, samplesLog = 100, samplesGraph = 10, precision = 2, minimal = false, horizontal = true, mode = 0 } = {} ) {
+  constructor({ logsPerSecond = 20, samplesLog = 100, samplesGraph = 10, precision = 2, minimal = false, horizontal = true, mode = 0, plugins = [] }: { logsPerSecond?: number, samplesLog?: number, samplesGraph?: number, precision?: number, minimal?: boolean, horizontal?: boolean, mode?: number, plugins?: StatsPlugin[] } = {}) {
 
+    this.panelOffset = 0;
+    this.plugins = plugins;
+
+    this.disabled = false
     this.mode = mode;
     this.horizontal = horizontal;
     this.container = document.createElement( 'div' );
@@ -66,9 +75,10 @@ class Stats {
     };
 
     this.queryCreated = false;
+    this.panels = [];
 
-    this.fpsPanel = this.addPanel( new Stats.Panel( 'FPS', '#0ff', '#002' ), 0 );
-    this.msPanel = this.addPanel( new Stats.Panel( 'CPU', '#0f0', '#020' ), 1 );
+    this.fpsPanel = this.addPanel( new Stats.Panel( 'FPS', '#0ff', '#002' ) );
+    this.msPanel = this.addPanel( new Stats.Panel( 'CPU', '#0f0', '#020' ) );
     this.gpuPanel = null;
 
     this.samplesLog = samplesLog;
@@ -92,48 +102,78 @@ class Stats {
 
       window.addEventListener('resize', () =>{
         
-        this.resizePanel( this.fpsPanel, 0 );
-        this.resizePanel( this.msPanel, 1 );
-  
-        if (this.gpuPanel) {
-          this.resizePanel( this.gpuPanel, 2 );
-        }
+        this.resizePanels()
+      
       })
+      this.resizePanels()
+
     }
 
   }
 
-  resizePanel( panel: Panel, offset: number) {
+  addPlugin(plugin: StatsPlugin) {
+    // if (plugin.framework === "webgl2") {
 
-    panel.canvas.style.position = 'absolute';
+        let panel;
+        if (plugin.render) {
+            // if a render function is provided, use FBOPanel
+            // This is where you would pass in the framework-specific renderer, scene, camera.
+            panel = new FBOPanel(this, plugin.name, plugin.fg, plugin.bg, plugin.renderer, plugin.scene, plugin.camera, plugin.render, plugin.onBeforeRender, plugin.onAfterRender);
+        } else {
+            panel = new Panel(plugin.name, plugin.fg, plugin.bg);
+        }
+        // Store a reference of the plugin in the panel to update it
+        (panel as any).plugin = plugin;
 
-    if ( this.minimal ) {
+        this.addPanel(panel);
 
-      panel.canvas.style.display = 'none';
 
-    } else {
-
-      panel.canvas.style.display = 'block';
-      if (this.horizontal) {
-        panel.canvas.style.top = '0px';
-        panel.canvas.style.left = offset * panel.WIDTH / panel.PR + 'px';
-      } else {
-        panel.canvas.style.left = '0px';
-        panel.canvas.style.top = offset * panel.HEIGHT / panel.PR  + 'px';
-
-      }
-    }
+    // }
   }
+
+
+  resizePanels() {
     
-  addPanel(panel: Panel, offset: number) {
+    for( let i = 0; i < this.panels.length; i ++ ) {
+      const panel = this.panels[i];
+        panel.canvas.style.position = 'absolute';
 
+        if ( this.minimal ) {
+
+          panel.canvas.style.display = 'none';
+    
+        } else {
+
+          panel.canvas.style.display = 'block';
+
+          if (this.horizontal) {
+            panel.X = panel.WIDTH * i  / panel.PR;
+            panel.Y = 0
+
+          } else {
+            panel.X = 0
+            panel.Y = panel.HEIGHT * i  / panel.PR;
+          }
+
+          panel.canvas.style.left = panel.X + 'px'
+          panel.canvas.style.top =  panel.Y + 'px'
+        }
+    }
+}
+    
+  addPanel(panel: Panel) {
+
+  
     if(panel.canvas) {
 
       this.container.appendChild(panel.canvas);
-    
-      this.resizePanel(panel, offset);
-
     }
+    panel.index = this.panelOffset;
+    this.panelOffset++;
+
+    this.panels.push(panel);
+
+    this.resizePanels();
 
     return panel;
 
@@ -160,13 +200,16 @@ class Stats {
     this.ext = this.gl ? this.gl.getExtension( 'EXT_disjoint_timer_query_webgl2' ) : null;
     if ( this.ext ) {
 
-      this.gpuPanel = this.addPanel( new Stats.Panel( 'GPU', '#ff0', '#220' ), 2 );
+      this.gpuPanel = this.addPanel( new Stats.Panel( 'GPU', '#ff0', '#220' ) );
 
     }
-
+        
+    // Instantiate the plugins
+    this.plugins.forEach(plugin => this.addPlugin(plugin));
   }
 
   begin() {
+    if (this.disabled) return
 
     this.beginProfiling( 'cpu-started' );
     if ( ! this.gl || ! this.ext ) return;
@@ -193,6 +236,19 @@ class Stats {
 
           this.addToAverage( ms, this.averageGpu );
 
+
+          for (let i = 0; i < this.panels.length; i++) {
+            const panel = this.panels[i];
+    
+            if (panel && (panel as any).plugin) {
+              // If this panel is from a plugin, use the plugin's update method
+              if ((panel as any).plugin.render) {
+                (panel as FBOPanel).renderBufferDirect();
+              }
+              continue;
+            }
+      
+          }
         }
 
       }
@@ -213,6 +269,7 @@ class Stats {
   }
 
   end() {
+    if (this.disabled) return
 
     this.beginTime = this.endInternal()
 
@@ -227,7 +284,7 @@ class Stats {
 
     }
 
-
+  
   }
 
   endInternal() {
@@ -238,6 +295,22 @@ class Stats {
     if (time >= this.prevCpuTime + 1000 / this.logsPerSecond) {
       this.updatePanel( this.msPanel, this.averageCpu );
       this.updatePanel( this.gpuPanel, this.averageGpu );
+
+
+
+      for (let i = 0; i < this.panels.length; i++) {
+        const panel = this.panels[i];
+
+        if (panel && (panel as any).plugin) {
+          // If this panel is from a plugin, use the plugin's update method
+          if (!(panel as any).plugin.render) {
+            const value = (panel as any).plugin.update();
+            panel.update(value, value, 100, 100, this.precision);
+          }
+          continue;
+        }
+  
+      }
 
       this.prevCpuTime = time;
     }

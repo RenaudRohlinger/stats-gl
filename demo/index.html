@@ -106,7 +106,7 @@
     </a>
 
     <div id="app"></div>
-
+<!-- 
     <div class="code-overlay">
       <pre>
 <span class="comment">// Threejs example</span>
@@ -130,7 +130,7 @@ scene.onAfterRender = <span class="keyword">function</span> () {
 
     <div id="footer">
       Made with love ❤️ by <a href="https://twitter.com/onirenaud" target="_blank">@onirenaud 🐦</a> - <a href="https://twitter.com/utsuboco" target="_blank">@utsuboco 🐦</a>
-    </div>
+    </div> -->
 
 		<script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
 
@@ -144,8 +144,8 @@ scene.onAfterRender = <span class="keyword">function</span> () {
     
 		<script type="module">
 
-      import Stats from './dist/main.js'
-      // import Stats from '../lib/main.ts'
+      // import Stats from './dist/main.js'
+      import Stats from '../lib/main.ts'
 
       import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
 
@@ -159,10 +159,7 @@ scene.onAfterRender = <span class="keyword">function</span> () {
   
       const clock = new THREE.Clock();
       const container = document.getElementById( 'container' );
-  
-      const stats = new Stats();
-      container.appendChild( stats.container );
-  
+
       const renderer = new THREE.WebGLRenderer( { antialias: true } );
       renderer.setPixelRatio( window.devicePixelRatio );
       renderer.setSize( window.innerWidth, window.innerHeight );
@@ -174,23 +171,63 @@ scene.onAfterRender = <span class="keyword">function</span> () {
       scene.background = new THREE.Color( 0xbfe3dd );
       scene.environment = pmremGenerator.fromScene( new RoomEnvironment(), 0.04 ).texture;
   
+      const camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 1, 100 );
+      camera.position.set( 5, 2, 8 );
+        
+      const normalMaterial = new THREE.MeshNormalMaterial()
+      const stats = new Stats({
+          plugins: [
+            {
+                framework: "threejs",
+                name: "Physic",
+                fg: "#f0f",
+                bg: "#220",
+                min: 0,
+                max: 100,
+                update: () => {
+                    // fetch or compute data
+                    return 60; // just a dummy value for this example
+                }
+            },
+            {
+                framework: "threejs",
+                name: "Normal FBO",
+                renderer,
+                scene,
+                camera,
+                // onBeforeRender: () => {}
+                // onAfterRender: () => {}
+                render: () => {
+                  const tempBackground = scene.background
+                  scene.background = null
+                  scene.overrideMaterial = normalMaterial
+                  // render to FBO
+                  renderer.render(scene, camera);
+                  scene.overrideMaterial = null
+                  scene.background = tempBackground
+                }
+            },
+          ]
+        }
+      );
+      
+      container.appendChild( stats.container );
+  
       stats.init( renderer.domElement );
   
       scene.onBeforeRender = function () {
-  
+        
         stats.begin();
-  
+
       };
-  
+
       scene.onAfterRender = function () {
-  
+
         stats.end();
-  
+
       };
-  
-      const camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 1, 100 );
-      camera.position.set( 5, 2, 8 );
-  
+        
+
       const controls = new OrbitControls( camera, renderer.domElement );
       controls.target.set( 0, 0.5, 0 );
       controls.update();

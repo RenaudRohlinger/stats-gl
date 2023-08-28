@@ -5,6 +5,9 @@ class Panel {
     fg: string;
     bg: string;
     PR: number;
+    index: number;
+    X: number;
+    Y: number;
     WIDTH: number;
     HEIGHT: number;
     TEXT_X: number;
@@ -14,13 +17,16 @@ class Panel {
     GRAPH_WIDTH: number;
     GRAPH_HEIGHT: number;
 
-    constructor(name: string, fg: string, bg: string) {
+    constructor(name: string, fg: string = '#fff', bg: string = '#000') {
 
         this.name = name;
         this.fg = fg;
         this.bg = bg;
         this.PR = Math.round( window.devicePixelRatio || 1 );
         
+        this.index = 0;
+        this.X = 0;
+        this.Y = 0
         this.WIDTH = 90 * this.PR;
         this.HEIGHT = 48 * this.PR;
         this.TEXT_X = 3 * this.PR;
