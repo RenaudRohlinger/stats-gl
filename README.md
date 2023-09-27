@@ -85,7 +85,7 @@ scene.onAfterRender = function () {
 
 };
 ```
-Quick start with [@react-three/fiber](https://github.com/pmndrs/fiber). A `<StatsGl />` component is avaible through [@react-three/drei](https://github.com/pmndrs/drei):
+Quick start with [@react-three/fiber](https://github.com/pmndrs/fiber). A `<StatsGl />` component is available through [@react-three/drei](https://github.com/pmndrs/drei):
 ```jsx
 import { Canvas } from '@react-three/fiber'
 import { StatsGl } from '@react-three/drei'
@@ -97,6 +97,20 @@ const Scene = () => (
 )
 ```
 
+Quick start with [Tresjs](https://tresjs.org/) for Vue developers. A `<StatsGl />` component is available through [cientos](https://cientos.tresjs.org/guide/misc/stats-gl.html):
+
+```vue
+<script setup lang="ts">
+import { TresCanvas } from '@tresjs/core'
+import { StatsGl } from '@tresjs/cientos'
+</script>
+
+<template>
+  <TresCanvas>
+    <StatsGl />
+  </TresCanvas>
+</template>
+```
 ## ⚙️ Parameters
 The constructor for the Stats class accepts an options object with the following properties:
 
