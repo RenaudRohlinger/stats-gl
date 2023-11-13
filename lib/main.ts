@@ -150,21 +150,35 @@ class Stats {
 
   }
 
-  init(canvas: any) {
-
-    if (!canvas) {
+  init(canvasOrGL: HTMLCanvasElement | OffscreenCanvas | WebGL2RenderingContext) {
+    if (!canvasOrGL) {
       console.error('Stats: The "canvas" parameter is undefined.');
       return;
     }
-    this.gl = canvas.getContext('webgl2');
-    this.ext = this.gl ? this.gl.getExtension('EXT_disjoint_timer_query_webgl2') : null;
-    if (this.ext) {
 
-      this.gpuPanel = this.addPanel(new Stats.Panel('GPU', '#ff0', '#220'), 2);
-
+    // Check if canvasOrGL is already a WebGL2RenderingContext
+    if (canvasOrGL instanceof WebGL2RenderingContext) {
+      this.gl = canvasOrGL;
+    }
+    // Handle HTMLCanvasElement and OffscreenCanvas
+    else if (canvasOrGL instanceof HTMLCanvasElement || canvasOrGL instanceof OffscreenCanvas) {
+      this.gl = canvasOrGL.getContext('webgl2') as WebGL2RenderingContext;
+      if (!this.gl) {
+        console.error('Stats: Unable to obtain WebGL2 context.');
+        return;
+      }
+    } else {
+      console.error('Stats: Invalid input type. Expected WebGL2RenderingContext, HTMLCanvasElement, or OffscreenCanvas.');
+      return;
     }
 
+    // Get the extension
+    this.ext = this.gl.getExtension('EXT_disjoint_timer_query_webgl2');
+    if (this.ext) {
+      this.gpuPanel = this.addPanel(new Stats.Panel('GPU', '#ff0', '#220'), 2);
+    }
   }
+
 
   begin() {
 
