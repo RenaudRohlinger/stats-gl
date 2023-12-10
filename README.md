@@ -78,7 +78,7 @@ container.appendChild( renderer.domElement );
 
 const scene = new THREE.Scene();
 
-stats.init( renderer );
+stats.init( renderer ); // this will patch the threejs render function so no need to call begin() or end()
 
 function animate() {
 
