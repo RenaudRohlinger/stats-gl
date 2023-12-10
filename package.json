@@ -1,6 +1,6 @@
 {
   "name": "stats-gl",
-  "version": "1.0.7",
+  "version": "2.0.0",
   "type": "module",
   "author": "Renaud ROHLINGER (https://github.com/RenaudRohlinger)",
   "homepage": "https://github.com/RenaudRohlinger/stats-gl",
@@ -28,6 +28,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/three": "^0.159.0",
     "fs-extra": "^11.1.1",
     "path": "^0.12.7",
     "rollup": "^3.26.3",

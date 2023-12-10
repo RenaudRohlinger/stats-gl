@@ -1,5 +1,5 @@
 import Panel from "./panel";
-
+import * as THREE from 'three';
 export interface AverageArray {
   logs: number[];
   graph: number[];
@@ -7,8 +7,11 @@ export interface AverageArray {
 
 
 class Stats {
+  totalCpuDuration: number = 0;
+  totalGpuDuration: number = 0;
+  totalFps: number = 0;
   mode: number;
-  container: HTMLDivElement;
+  dom: HTMLDivElement;
   minimal: boolean;
   horizontal: boolean;
   beginTime: number;
@@ -18,6 +21,7 @@ class Stats {
   averageCpu: AverageArray;
   averageGpu: AverageArray;
   queryCreated: boolean;
+  isRunningCPUProfiling: boolean;
   fpsPanel: Panel;
   static Panel: typeof Panel = Panel;
   msPanel: Panel;
@@ -25,35 +29,43 @@ class Stats {
   samplesLog: number;
   samplesGraph: number;
   logsPerSecond: number;
+  activeQuery: WebGLQuery | null = null;
+
   precision: number;
   gl: WebGL2RenderingContext | null;
   ext: any;
   query: WebGLQuery | null;
   disjoint: any;
   ns: any;
+  threeRendererPatched: boolean;
+  gpuQueries: { query: WebGLQuery }[] = [];
+  renderCount: number = 0;
 
   constructor({ logsPerSecond = 20, samplesLog = 100, samplesGraph = 10, precision = 2, minimal = false, horizontal = true, mode = 0 } = {}) {
 
     this.mode = mode;
     this.horizontal = horizontal;
-    this.container = document.createElement('div');
-    this.container.style.cssText = 'position:fixed;top:0;left:0;opacity:0.9;z-index:10000;';
+    this.dom = document.createElement('div');
+    this.dom.style.cssText = 'position:fixed;top:0;left:0;opacity:0.9;z-index:10000;';
 
     if (minimal) {
 
-      this.container.style.cssText += 'cursor:pointer';
+      this.dom.style.cssText += 'cursor:pointer';
 
     }
 
     this.gl = null;
     this.query = null;
 
+    this.isRunningCPUProfiling = false;
     this.minimal = minimal;
-
+    
     this.beginTime = (performance || Date).now();
     this.prevTime = this.beginTime;
     this.prevCpuTime = this.beginTime;
     this.frames = 0;
+    this.renderCount = 0;
+    this.threeRendererPatched = false;
     this.averageCpu = {
       logs: [],
       graph: []
@@ -76,10 +88,10 @@ class Stats {
 
     if (this.minimal) {
 
-      this.container.addEventListener('click', (event) => {
+      this.dom.addEventListener('click', (event) => {
 
         event.preventDefault();
-        this.showPanel(++this.mode % this.container.children.length);
+        this.showPanel(++this.mode % this.dom.children.length);
 
       }, false);
 
@@ -98,6 +110,29 @@ class Stats {
         }
       })
     }
+
+
+  }
+
+  patchThreeRenderer(renderer: THREE.WebGLRenderer) {
+
+    // Store the original render method
+    const originalRenderMethod = renderer.render;
+
+    // Reference to the stats instance
+    const statsInstance = this;
+
+    // Override the render method on the prototype
+    renderer.render = function(scene, camera) {
+      statsInstance.begin(); // Start tracking for this render call
+
+      // Call the original render method
+      originalRenderMethod.call(this, scene, camera);
+
+      statsInstance.end(); // End tracking for this render call
+    };
+
+    this.threeRendererPatched = true;
 
   }
 
@@ -127,7 +162,7 @@ class Stats {
 
     if (panel.canvas) {
 
-      this.container.appendChild(panel.canvas);
+      this.dom.appendChild(panel.canvas);
 
       this.resizePanel(panel, offset);
 
@@ -139,8 +174,8 @@ class Stats {
 
   showPanel(id: number) {
 
-    for (let i = 0; i < this.container.children.length; i++) {
-      const child = this.container.children[i] as HTMLElement;
+    for (let i = 0; i < this.dom.children.length; i++) {
+      const child = this.dom.children[i] as HTMLElement;
 
       child.style.display = i === id ? 'block' : 'none';
 
@@ -156,18 +191,32 @@ class Stats {
       return;
     }
 
+
+    // if ((canvasOrGL as any).isWebGPURenderer && !this.threeRendererPatched) {
+    // TODO Color GPU Analytic in another color than yellow to know webgpu or webgl context (blue)
+    //   const canvas: any = canvasOrGL
+    //   this.patchThreeRenderer(canvas as any);
+    //   this.gl = canvas.getContext();
+    // } else 
+    if ((canvasOrGL as any).isWebGLRenderer && !this.threeRendererPatched) {
+      const canvas: any = canvasOrGL
+      this.patchThreeRenderer(canvas as any);
+      this.gl = canvas.getContext();
+    }
+
     // Check if canvasOrGL is already a WebGL2RenderingContext
-    if (canvasOrGL instanceof WebGL2RenderingContext) {
+    if (!this.gl && canvasOrGL instanceof WebGL2RenderingContext) {
       this.gl = canvasOrGL;
     }
+
     // Handle HTMLCanvasElement and OffscreenCanvas
-    else if (canvasOrGL instanceof HTMLCanvasElement || canvasOrGL instanceof OffscreenCanvas) {
+    else if (!this.gl && canvasOrGL instanceof HTMLCanvasElement || canvasOrGL instanceof OffscreenCanvas) {
       this.gl = canvasOrGL.getContext('webgl2') as WebGL2RenderingContext;
       if (!this.gl) {
         console.error('Stats: Unable to obtain WebGL2 context.');
         return;
       }
-    } else {
+    } else if (!this.gl) {
       console.error('Stats: Invalid input type. Expected WebGL2RenderingContext, HTMLCanvasElement, or OffscreenCanvas.');
       return;
     }
@@ -182,64 +231,79 @@ class Stats {
 
   begin() {
 
-    this.beginProfiling('cpu-started');
-    if (!this.gl || !this.ext) return;
-
-
-    if (this.query) {
-
-      const available = this.gl.getQueryParameter(this.query, this.gl.QUERY_RESULT_AVAILABLE);
-      this.disjoint = this.gl.getParameter(this.ext.GPU_DISJOINT_EXT);
-
-      if (available && !this.disjoint) {
-
-        this.ns = this.gl.getQueryParameter(this.query, this.gl.QUERY_RESULT);
-        const ms = this.ns * 1e-6;
-
-        if (available || this.disjoint) {
-
-          this.gl.deleteQuery(this.query);
-          this.query = null;
-
-        }
-
-        if (available) {
-
-          this.addToAverage(ms, this.averageGpu);
-
-        }
-
-      }
-
+    if (!this.isRunningCPUProfiling) {
+      this.beginProfiling('cpu-started');
     }
 
-    if (!this.query) {
-
-      this.queryCreated = true;
-      this.query = this.gl.createQuery();
-
-      if (this.query) {
-        this.gl.beginQuery(this.ext.TIME_ELAPSED_EXT, this.query);
+    if (!this.gl || !this.ext) return;
+  
+    if (this.gl && this.ext) {
+      if (this.activeQuery) {
+        // End the previous query if it's still active
+        this.gl.endQuery(this.ext.TIME_ELAPSED_EXT);
       }
 
+      this.activeQuery = this.gl.createQuery();
+      if (this.activeQuery !== null) {
+        this.gl.beginQuery(this.ext.TIME_ELAPSED_EXT, this.activeQuery);
+      }
+    }
+  }
+
+
+
+  end() {
+
+    // Increase render count
+    this.renderCount++;
+
+    if (this.gl && this.ext && this.activeQuery) {
+      this.gl.endQuery(this.ext.TIME_ELAPSED_EXT);
+      // Add the active query to the gpuQueries array and reset it
+      this.gpuQueries.push({ query: this.activeQuery });
+      this.activeQuery = null;
     }
 
   }
 
-  end() {
+  processGpuQueries() {
+    if (!this.gl || !this.ext) return;
+  
+    this.totalGpuDuration = 0;
+
+    this.gpuQueries.forEach((queryInfo, index) => {
+      if (this.gl) {
+        const available = this.gl.getQueryParameter(queryInfo.query, this.gl.QUERY_RESULT_AVAILABLE);
+        const disjoint = this.gl.getParameter(this.ext.GPU_DISJOINT_EXT);
+
+        if (available && !disjoint) {
+          const elapsed = this.gl.getQueryParameter(queryInfo.query, this.gl.QUERY_RESULT);
+          const duration = elapsed * 1e-6;  // Convert nanoseconds to milliseconds
+          this.totalGpuDuration += duration;
+          this.gl.deleteQuery(queryInfo.query);
+          this.gpuQueries.splice(index, 1);  // Remove the processed query
+        }
+      }
+    });
+
+  }
+
+  update() {
+  
+    this.processGpuQueries();
+    this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
+
+    // Calculate the total duration of CPU and GPU work for this frame
+    this.addToAverage(this.totalCpuDuration , this.averageCpu);
+    this.addToAverage(this.totalGpuDuration, this.averageGpu);
+
+    this.renderCount = 0;
+    this.totalCpuDuration = 0;
+    this.totalGpuDuration = 0;
+    this.totalFps = 0;
 
     this.beginTime = this.endInternal()
 
-    this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration', this.averageCpu);
-
-    if (!this.gl || !this.ext) return;
-
-
-    if (this.queryCreated && this.gl.getQuery(this.ext.TIME_ELAPSED_EXT, this.gl.CURRENT_QUERY)) {
-
-      this.gl.endQuery(this.ext.TIME_ELAPSED_EXT);
-
-    }
 
 
   }
@@ -294,18 +358,20 @@ class Stats {
     if (window.performance) {
 
       window.performance.mark(marker);
+      this.isRunningCPUProfiling = true
 
     }
 
   }
 
-  endProfiling(startMarker: string | PerformanceMeasureOptions | undefined, endMarker: string | undefined, measureName: string, averageArray: { logs: number[], graph: number[] }) {
+  endProfiling(startMarker: string | PerformanceMeasureOptions | undefined, endMarker: string | undefined, measureName: string) {
 
-    if (window.performance && endMarker) {
+    if (window.performance && endMarker && this.isRunningCPUProfiling) {
 
       window.performance.mark(endMarker);
       const cpuMeasure = performance.measure(measureName, startMarker, endMarker);
-      this.addToAverage(cpuMeasure.duration, averageArray);
+      this.totalCpuDuration += cpuMeasure.duration;
+      this.isRunningCPUProfiling = false
 
     }
 
@@ -347,6 +413,18 @@ class Stats {
     }
   }
 
+  get domElement() {
+    // patch for some use case in threejs
+		return this.dom;
+
+	}
+
+  get container() { // @deprecated
+
+		console.warn('Stats: Deprecated! this.container as been replaced to this.dom ')
+		return this.dom;
+
+	}
 
 }
 

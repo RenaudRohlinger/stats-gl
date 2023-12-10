@@ -44,13 +44,20 @@ const stats = new Stats({
 });
 
 // append the stats container to the body of the document
-document.body.appendChild( stats.container );
+document.body.appendChild( stats.dom );
 
 // begin the performance monitor
 stats.begin();
-
 // end the performance monitor
 stats.end();
+
+stats.begin();
+// gl.draw... second pass
+stats.end();
+
+
+// when all the passes are drawn update the logs
+stats.update();
 ```
 
 
@@ -64,26 +71,23 @@ import Stats from 'https://www.unpkg.com/stats-gl?module';
 const container = document.getElementById( 'container' );
 
 const stats = new Stats();
-container.appendChild( stats.container );
+container.appendChild( stats.dom );
 
 const renderer = new THREE.WebGLRenderer( { antialias: true } );
 container.appendChild( renderer.domElement );
 
 const scene = new THREE.Scene();
 
-stats.init( renderer.domElement );
+stats.init( renderer );
 
-scene.onBeforeRender = function () {
+function animate() {
 
-    stats.begin();
+    requestAnimationFrame( animate );
 
-};
+    render();
+    stats.update();
 
-scene.onAfterRender = function () {
-
-    stats.end();
-
-};
+}
 ```
 Quick start with [@react-three/fiber](https://github.com/pmndrs/fiber). A `<StatsGl />` component is available through [@react-three/drei](https://github.com/pmndrs/drei):
 ```jsx

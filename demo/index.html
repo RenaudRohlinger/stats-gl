@@ -115,15 +115,19 @@
 
 <span class="keyword">const</span> stats = <span class="keyword">new</span> Stats();
 <span class="keyword">const</span> renderer = <span class="keyword">new</span> THREE.WebGLRenderer();
-stats.init( renderer.domElement );
+document.body.appendChild( stats.container );
 
-scene.onBeforeRender = <span class="keyword">function</span> () {
-    stats.begin();
-};
+stats.init( renderer );
 
-scene.onAfterRender = <span class="keyword">function</span> () {
-    stats.end();
-};
+function animate() {
+  
+  requestAnimationFrame( animate );
+
+  renderer.render( scene, camera );
+
+  stats.update();
+
+}
       </pre>
     </div>
 
@@ -132,122 +136,148 @@ scene.onAfterRender = <span class="keyword">function</span> () {
       Made with love ❤️ by <a href="https://twitter.com/onirenaud" target="_blank">@onirenaud 🐦</a> - <a href="https://twitter.com/utsuboco" target="_blank">@utsuboco 🐦</a>
     </div>
 
-		<script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
-
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://unpkg.com/three@0.154.0/build/three.module.js"
-        }
-      }
-    </script>
-    
+   
 		<script type="module">
 
-      import Stats from './dist/main.js'
-      // import Stats from '../lib/main.ts'
+      // import Stats from './dist/main.js'
+      import Stats from '../lib/main.ts'
 
-      import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
+			import * as THREE from 'three';
+			import { mix, range, normalWorld, oscSine, timerLocal } from '../node_modules/three/examples/jsm/nodes/Nodes.js';
 
-      import { OrbitControls } from 'https://unpkg.com/three@0.154.0/examples/jsm/controls/OrbitControls.js';
-      import { RoomEnvironment } from 'https://unpkg.com/three@0.154.0/examples/jsm/environments/RoomEnvironment.js';
-  
-      import { GLTFLoader } from 'https://unpkg.com/three@0.154.0/examples/jsm/loaders/GLTFLoader.js';
-      import { DRACOLoader } from 'https://unpkg.com/three@0.154.0/examples/jsm/loaders/DRACOLoader.js';
-  
-      let mixer;
-  
-      const clock = new THREE.Clock();
-      const container = document.getElementById( 'container' );
-  
-      const stats = new Stats();
-      container.appendChild( stats.container );
-  
-      const renderer = new THREE.WebGLRenderer( { antialias: true } );
-      renderer.setPixelRatio( window.devicePixelRatio );
-      renderer.setSize( window.innerWidth, window.innerHeight );
-      container.appendChild( renderer.domElement );
-  
-      const pmremGenerator = new THREE.PMREMGenerator( renderer );
-  
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color( 0xbfe3dd );
-      scene.environment = pmremGenerator.fromScene( new RoomEnvironment(), 0.04 ).texture;
-  
-      stats.init( renderer.domElement );
-  
-      scene.onBeforeRender = function () {
-  
-        stats.begin();
-  
-      };
-  
-      scene.onAfterRender = function () {
-  
-        stats.end();
-  
-      };
-  
-      const camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 1, 100 );
-      camera.position.set( 5, 2, 8 );
-  
-      const controls = new OrbitControls( camera, renderer.domElement );
-      controls.target.set( 0, 0.5, 0 );
-      controls.update();
-      controls.enablePan = false;
-      controls.enableDamping = true;
-  
-      const dracoLoader = new DRACOLoader();
-      dracoLoader.setDecoderPath( 'https://unpkg.com/three@0.154.0/examples/jsm/libs/draco/gltf/' );
-  
-  
-      // scene.overrideChildren = [];
-      
-      const loader = new GLTFLoader();
-      loader.setDRACOLoader( dracoLoader );
-      loader.load( './LittlestTokyo.glb', function ( gltf ) {
-  
-        const model = gltf.scene;
-        model.position.set( 1, 1, 0 );
-        model.scale.set( 0.01, 0.01, 0.01 );
-        scene.add( model );
-  
-        mixer = new THREE.AnimationMixer( model );
-        mixer.clipAction( gltf.animations[ 0 ] ).play();
-  
-        animate();
-  
-      }, undefined, function ( e ) {
-  
-        console.error( e );
-  
-      } );
-  
-  
-      window.onresize = function () {
-  
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-  
-        renderer.setSize( window.innerWidth, window.innerHeight );
-  
-      };
-  
-  
-      function animate() {
-  
-        requestAnimationFrame( animate );
-  
-        const delta = clock.getDelta();
-  
-        mixer.update( delta );
-  
-        controls.update();
-  
-        renderer.render( scene, camera );
-  
-      }
-  
+			import { GUI } from '../node_modules/three/examples/jsm/libs/lil-gui.module.min.js';
+
+			import WebGPU from '../node_modules/three/examples/jsm/capabilities/WebGPU.js';
+			import WebGL from '../node_modules/three/examples/jsm/capabilities/WebGL.js';
+
+			import WebGPURenderer from '../node_modules/three/examples/jsm/renderers/webgpu/WebGPURenderer.js';
+
+			let camera, scene, renderer, stats;
+
+			let mesh;
+			const amount = parseInt( window.location.search.slice( 1 ) ) || 10;
+			const count = Math.pow( amount, 3 );
+			const dummy = new THREE.Object3D();
+
+			init();
+
+			function init() {
+
+				if ( WebGPU.isAvailable() === false && WebGL.isWebGL2Available() === false ) {
+
+					document.body.appendChild( WebGPU.getErrorMessage() );
+
+					throw new Error( 'No WebGPU or WebGL2 support' );
+
+				}
+
+				camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 100 );
+				camera.position.set( amount * 0.9, amount * 0.9, amount * 0.9 );
+				camera.lookAt( 0, 0, 0 );
+
+				scene = new THREE.Scene();
+
+				const material = new THREE.MeshBasicMaterial();
+
+				// random colors between instances from 0x000000 to 0xFFFFFF
+				const randomColors = range( new THREE.Color( 0x000000 ), new THREE.Color( 0xFFFFFF ) );
+
+				material.colorNode = mix( normalWorld, randomColors, oscSine( timerLocal( .1 ) ) );
+
+				const geometry = new THREE.BoxGeometry();
+
+        geometry.computeVertexNormals();
+        geometry.scale( 0.5, 0.5, 0.5 );
+
+        mesh = new THREE.InstancedMesh( geometry, material, count );
+        mesh.instanceMatrix.setUsage( THREE.DynamicDrawUsage );
+
+        scene.add( mesh );
+
+        //
+
+        const gui = new GUI();
+        gui.add( mesh, 'count', 0, count );
+
+
+				//
+
+				renderer = new THREE.WebGLRenderer( { antialias: true } );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				renderer.setAnimationLoop( animate );
+				document.body.appendChild( renderer.domElement );
+
+				//
+
+				stats = new Stats();
+				document.body.appendChild( stats.dom );
+				stats.init( renderer );
+
+				//
+
+				window.addEventListener( 'resize', onWindowResize );
+
+			}
+
+			function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			//
+
+			function animate() {
+
+				render();
+
+				stats.update();
+
+			}
+
+			async function render() {
+
+				if ( mesh ) {
+
+					const time = Date.now() * 0.001;
+
+					mesh.rotation.x = Math.sin( time / 4 );
+					mesh.rotation.y = Math.sin( time / 2 );
+
+					let i = 0;
+					const offset = ( amount - 1 ) / 2;
+
+					for ( let x = 0; x < amount; x ++ ) {
+
+						for ( let y = 0; y < amount; y ++ ) {
+
+							for ( let z = 0; z < amount; z ++ ) {
+
+								dummy.position.set( offset - x, offset - y, offset - z );
+								dummy.rotation.y = ( Math.sin( x / 4 + time ) + Math.sin( y / 4 + time ) + Math.sin( z / 4 + time ) );
+								dummy.rotation.z = dummy.rotation.y * 2;
+
+								dummy.updateMatrix();
+
+								mesh.setMatrixAt( i ++, dummy.matrix );
+
+							}
+
+						}
+
+					}
+
+				}
+
+				renderer.render( scene, camera );
+			}
+
+		</script>
+
   
       </script>
   

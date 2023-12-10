@@ -16,7 +16,7 @@ export default defineConfig({
     rollupOptions: {
       treeshake: false,
       output: {
-        preserveModules: true,
+        preserveModules: true, // false for threejs module
         preserveModulesRoot: 'src',
         sourcemapExcludeSources: true,
       },
