@@ -197,6 +197,8 @@ container.appendChild( stats.dom );
 
       import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
       import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+      import StorageInstancedBufferAttribute from 'three/addons/renderers/common/StorageInstancedBufferAttribute.js';
+      import { tslFn, instanceIndex, float, vec3, storage } from 'three/nodes';
 
       import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
       import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
@@ -211,7 +213,6 @@ container.appendChild( stats.dom );
 
       const renderer = new THREE.WebGLRenderer({
         antialias: true,
-        forceWebGL: false,
       });
       // const renderer = new WebGPURenderer({
       //   antialias: true,
@@ -229,6 +230,16 @@ container.appendChild( stats.dom );
       //   new RoomEnvironment(),
       //   0.04
       // ).texture;
+
+      // const positionBuffer = storage(
+      //   new StorageInstancedBufferAttribute(10, 3),
+      //   'vec3',
+      //   10
+      // );
+
+      // const compute = tslFn(() => {
+      //   const position = positionBuffer.element(instanceIndex);
+      // })().compute(10);
 
       const camera = new THREE.PerspectiveCamera(
         40,
@@ -292,7 +303,8 @@ container.appendChild( stats.dom );
         controls.update();
 
         renderer.render(scene, camera);
-
+        // renderer.renderAsync(scene, camera);
+        // renderer.computeAsync(compute);
         stats.update();
       }
     </script>

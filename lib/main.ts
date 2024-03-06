@@ -9,6 +9,7 @@ export interface AverageArray {
 class Stats {
   totalCpuDuration: number = 0;
   totalGpuDuration: number = 0;
+  totalGpuDurationCompute: number = 0;
   totalFps: number = 0;
   mode: number;
   info: any;
@@ -21,12 +22,14 @@ class Stats {
   frames: number;
   averageCpu: AverageArray;
   averageGpu: AverageArray;
+  averageGpuCompute: AverageArray;
   queryCreated: boolean;
   isRunningCPUProfiling: boolean;
   fpsPanel: Panel;
   static Panel: typeof Panel = Panel;
   msPanel: Panel;
   gpuPanel: Panel | null;
+  gpuPanelCompute: Panel | null;
   samplesLog: number;
   samplesGraph: number;
   logsPerSecond: number;
@@ -75,12 +78,17 @@ class Stats {
       logs: [],
       graph: []
     };
+    this.averageGpuCompute = {
+      logs: [],
+      graph: []
+    };
 
     this.queryCreated = false;
 
     this.fpsPanel = this.addPanel(new Stats.Panel('FPS', '#0ff', '#002'), 0);
     this.msPanel = this.addPanel(new Stats.Panel('CPU', '#0f0', '#020'), 1);
     this.gpuPanel = null;
+    this.gpuPanelCompute = null;
 
     this.samplesLog = samplesLog;
     this.samplesGraph = samplesGraph;
@@ -109,6 +117,9 @@ class Stats {
         if (this.gpuPanel) {
           this.resizePanel(this.gpuPanel, 2);
         }
+        if (this.gpuPanelCompute) {
+          this.resizePanel(this.gpuPanelCompute, 3);
+        }
       })
     }
 
@@ -128,7 +139,8 @@ class Stats {
 
 
       if (statsInstance.info !== undefined) {
-        statsInstance.totalGpuDuration = this.info.timestamp.compute + this.info.timestamp.render
+        statsInstance.totalGpuDuration = this.info.timestamp.render
+        statsInstance.totalGpuDurationCompute = this.info.timestamp.compute
       }
 
       statsInstance.begin(); // Start tracking for this render call
@@ -145,7 +157,8 @@ class Stats {
       renderer.renderAsync = function (scene: THREE.Scene, camera: THREE.Camera) {
 
         if (statsInstance.info !== undefined) {
-          statsInstance.totalGpuDuration = this.info.timestamp.compute + this.info.timestamp.render
+          statsInstance.totalGpuDuration = this.info.timestamp.render
+          statsInstance.totalGpuDurationCompute = this.info.timestamp.compute
         }
 
         statsInstance.begin(); // Start tracking for this render call
@@ -241,6 +254,7 @@ class Stats {
 
       if (await canvasOrGL.hasFeatureAsync('timestamp-query')) {
         this.gpuPanel = this.addPanel(new Stats.Panel('GPU', '#ff0', '#220'), 2);
+        this.gpuPanelCompute = this.addPanel(new Stats.Panel('COM', '#e1e1e1', '#212121'), 3);
         this.info = canvasOrGL.info
       }
       return;
@@ -341,8 +355,12 @@ class Stats {
     this.renderCount = 0;
     this.totalCpuDuration = 0;
 
-    if (this.info === undefined) {
+    if (this.info !== undefined) {
+      this.addToAverage(this.totalGpuDurationCompute, this.averageGpuCompute);
+
       this.totalGpuDuration = 0;
+      this.totalGpuDurationCompute = 0;
+
     }
     this.totalFps = 0;
 
@@ -360,6 +378,10 @@ class Stats {
     if (time >= this.prevCpuTime + 1000 / this.logsPerSecond) {
       this.updatePanel(this.msPanel, this.averageCpu);
       this.updatePanel(this.gpuPanel, this.averageGpu);
+
+      if (this.gpuPanelCompute) {
+        this.updatePanel(this.gpuPanelCompute, this.averageGpuCompute);
+      }
 
       this.prevCpuTime = time;
     }
