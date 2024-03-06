@@ -1,9 +1,16 @@
-import { resolve } from 'path'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vite';
 
-const entries = ['./lib/main.ts']
+const entries = ['./lib/main.ts'];
 
 export default defineConfig({
+  optimizeDeps: {
+    include: ['three'], // optionally specify dependency name
+    esbuildOptions: {
+      supported: {
+        'top-level-await': true,
+      },
+    },
+  },
   build: {
     minify: false,
     sourcemap: true,
@@ -22,4 +29,4 @@ export default defineConfig({
       },
     },
   },
-})
+});
