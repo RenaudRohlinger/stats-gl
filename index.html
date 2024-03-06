@@ -192,16 +192,16 @@ container.appendChild( stats.dom );
       import Stats from './dist/main.js';
       // import Stats from './lib/main.ts';
 
-      import * as THREE from 'three';
-      import WebGPURenderer from 'three/addons/renderers/webgpu/WebGPURenderer.js';
+      import * as THREE from 'https://unpkg.com/three@dev/build/three.module.js';
+      import WebGPURenderer from 'https://unpkg.com/three@dev/examples/jsm/renderers/webgpu/WebGPURenderer.js';
 
-      import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-      import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-      import StorageInstancedBufferAttribute from 'three/addons/renderers/common/StorageInstancedBufferAttribute.js';
-      import { tslFn, instanceIndex, float, vec3, storage } from 'three/nodes';
+      import { OrbitControls } from 'https://unpkg.com/three@dev/examples/jsm/controls/OrbitControls.js';
+      import { RoomEnvironment } from 'https://unpkg.com/three@dev/examples/jsm/environments/RoomEnvironment.js';
+      import StorageInstancedBufferAttribute from 'https://unpkg.com/three@dev/examples/jsm/renderers/common/StorageInstancedBufferAttribute.js';
+      // import { tslFn, instanceIndex, float, vec3, storage } from 'three/nodes';
 
-      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-      import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+      import { GLTFLoader } from 'https://unpkg.com/three@dev/examples/jsm/loaders/GLTFLoader.js';
+      import { DRACOLoader } from 'https://unpkg.com/three@dev/examples/jsm/loaders/DRACOLoader.js';
 
       let mixer;
 
