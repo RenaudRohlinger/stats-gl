@@ -10,7 +10,7 @@ WebGL/WebGPU Performance Monitor tool.
 https://github.com/RenaudRohlinger/stats-gl/assets/15867665/3fdafff4-1357-4872-9baf-0629dbaf9d8c
 
 
-### ❗📢 Note: GPU Monitoring will be available on Safari after the v17 release.
+### ❗📢 Note: To support GPU monitoring on Safari you need to enable enable Timer Queries under WebKit Feature Flags > WebGL Timer Queries  
 
 ## 📚 Description
 
