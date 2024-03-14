@@ -2,7 +2,7 @@
 [![Version](https://img.shields.io/npm/v/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
 [![Version](https://img.shields.io/npm/dw/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
 
-WebGL Performance Monitor tool.
+WebGL/WebGPU Performance Monitor tool.
 
 🔗 [Live Demo](https://stats.renaudrohlinger.com/)
 
@@ -73,7 +73,7 @@ const container = document.getElementById( 'container' );
 const stats = new Stats();
 container.appendChild( stats.dom );
 
-const renderer = new THREE.WebGLRenderer( { antialias: true } );
+const renderer = new THREE.WebGLRenderer( { antialias: true } ); // or WebGPURenderer
 container.appendChild( renderer.domElement );
 
 const scene = new THREE.Scene();
@@ -84,7 +84,7 @@ function animate() {
 
     requestAnimationFrame( animate );
 
-    render();
+    render(); // needs async methods in WebGPU (renderAsync)
     stats.update();
 
 }
