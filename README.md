@@ -10,11 +10,11 @@ WebGL/WebGPU Performance Monitor tool.
 https://github.com/RenaudRohlinger/stats-gl/assets/15867665/3fdafff4-1357-4872-9baf-0629dbaf9d8c
 
 
-### ❗📢 Note: To support GPU monitoring on Safari you need to enable enable Timer Queries under WebKit Feature Flags > WebGL Timer Queries  
+### ❗📢 Note: To support GPU monitoring on Safari you need to enable Timer Queries under WebKit Feature Flags > WebGL Timer Queries  
 
 ## 📚 Description
 
-`stats-gl` is a comprehensive tool to monitor WebGL performance. The Stats class provides methods to create performance panels, log performance metrics, and manage the display and layout of these panels. The performance metrics logged include FPS, CPU, and GPU. The GPU logging is available only if the user's browser supports the WebGL 2.0 `EXT_disjoint_timer_query_webgl2` extension.
+`stats-gl` is a comprehensive tool to monitor WebGL performance. The Stats class provides methods to create performance panels, log performance metrics, and manage the display and layout of these panels. The performance metrics logged include FPS, CPU, and GPU. The GPU logging is available only if the user's browser supports the WebGL 2.0 `EXT_disjoint_timer_query_webgl2` extension or WebGPU Timestamp Queries.
 
 In addition to logging real-time performance data, the class also provides methods to calculate and display average performance metrics over a specified interval.
 
