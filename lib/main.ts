@@ -138,11 +138,6 @@ class Stats {
     renderer.render = function (scene: THREE.Scene, camera: THREE.Camera) {
 
 
-      if (statsInstance.info !== undefined) {
-        statsInstance.totalGpuDuration = this.info.timestamp.render
-        statsInstance.totalGpuDurationCompute = this.info.timestamp.compute
-      }
-
       statsInstance.begin(); // Start tracking for this render call
 
       // Call the original render method
@@ -151,28 +146,6 @@ class Stats {
       statsInstance.end(); // End tracking for this render call
     };
 
-    if (renderer.renderAsync) {
-      const originalRenderAsyncMethod = renderer.renderAsync;
-
-      renderer.renderAsync = function (scene: THREE.Scene, camera: THREE.Camera) {
-
-        if (statsInstance.info !== undefined) {
-          statsInstance.totalGpuDuration = this.info.timestamp.render
-          statsInstance.totalGpuDurationCompute = this.info.timestamp.compute
-        }
-
-        statsInstance.begin(); // Start tracking for this render call
-
-        // Call the original render method
-        originalRenderAsyncMethod.call(this, scene, camera);
-
-        statsInstance.end(); // End tracking for this render call
-
-
-
-
-      };
-    }
 
     this.threeRendererPatched = true;
 
@@ -240,7 +213,7 @@ class Stats {
     //   this.patchThreeRenderer(canvas as any);
     //   this.gl = canvas.getContext();
     // } else 
-    if (((canvasOrGL as any).isWebGLRenderer || (canvasOrGL as any).isWebGPURenderer) && !this.threeRendererPatched) {
+    if ((canvasOrGL as any).isWebGLRenderer && !this.threeRendererPatched) {
       const canvas: any = canvasOrGL
       this.patchThreeRenderer(canvas as any);
       this.gl = canvas.getContext();
@@ -254,7 +227,7 @@ class Stats {
 
       if (await canvasOrGL.hasFeatureAsync('timestamp-query')) {
         this.gpuPanel = this.addPanel(new Stats.Panel('GPU', '#ff0', '#220'), 2);
-        this.gpuPanelCompute = this.addPanel(new Stats.Panel('COM', '#e1e1e1', '#212121'), 3);
+        this.gpuPanelCompute = this.addPanel(new Stats.Panel('CPT', '#e1e1e1', '#212121'), 3);
         this.info = canvasOrGL.info
       }
       return;
@@ -345,7 +318,16 @@ class Stats {
 
   update() {
 
-    this.processGpuQueries();
+    if (this.info === undefined) {
+      this.processGpuQueries();
+    } else {
+
+      this.totalGpuDuration = this.info.render.timestamp
+      this.totalGpuDurationCompute = this.info.compute.timestamp
+      this.addToAverage(this.totalGpuDurationCompute, this.averageGpuCompute);
+
+    }
+
     this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
 
     // Calculate the total duration of CPU and GPU work for this frame
@@ -353,20 +335,17 @@ class Stats {
     this.addToAverage(this.totalGpuDuration, this.averageGpu);
 
     this.renderCount = 0;
+
+    // If this.totalCpuDuration is 0, it means that the CPU query was not created and stats.begin() never called/overrided
+    if (this.totalCpuDuration === 0) {
+      this.beginProfiling('cpu-started');
+    }
+
     this.totalCpuDuration = 0;
 
-    if (this.info !== undefined) {
-      this.addToAverage(this.totalGpuDurationCompute, this.averageGpuCompute);
-
-      this.totalGpuDuration = 0;
-      this.totalGpuDurationCompute = 0;
-
-    }
     this.totalFps = 0;
 
     this.beginTime = this.endInternal()
-
-
 
   }
 
