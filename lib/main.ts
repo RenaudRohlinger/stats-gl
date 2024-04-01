@@ -9,8 +9,10 @@ export interface AverageArray {
 class Stats {
   totalCpuDuration: number = 0;
   totalGpuDuration: number = 0;
+  totalGpuDurationCompute: number = 0;
   totalFps: number = 0;
   mode: number;
+  info: any;
   dom: HTMLDivElement;
   minimal: boolean;
   horizontal: boolean;
@@ -20,12 +22,14 @@ class Stats {
   frames: number;
   averageCpu: AverageArray;
   averageGpu: AverageArray;
+  averageGpuCompute: AverageArray;
   queryCreated: boolean;
   isRunningCPUProfiling: boolean;
   fpsPanel: Panel;
   static Panel: typeof Panel = Panel;
   msPanel: Panel;
   gpuPanel: Panel | null;
+  gpuPanelCompute: Panel | null;
   samplesLog: number;
   samplesGraph: number;
   logsPerSecond: number;
@@ -59,7 +63,7 @@ class Stats {
 
     this.isRunningCPUProfiling = false;
     this.minimal = minimal;
-    
+
     this.beginTime = (performance || Date).now();
     this.prevTime = this.beginTime;
     this.prevCpuTime = this.beginTime;
@@ -74,12 +78,17 @@ class Stats {
       logs: [],
       graph: []
     };
+    this.averageGpuCompute = {
+      logs: [],
+      graph: []
+    };
 
     this.queryCreated = false;
 
     this.fpsPanel = this.addPanel(new Stats.Panel('FPS', '#0ff', '#002'), 0);
     this.msPanel = this.addPanel(new Stats.Panel('CPU', '#0f0', '#020'), 1);
     this.gpuPanel = null;
+    this.gpuPanelCompute = null;
 
     this.samplesLog = samplesLog;
     this.samplesGraph = samplesGraph;
@@ -108,13 +117,16 @@ class Stats {
         if (this.gpuPanel) {
           this.resizePanel(this.gpuPanel, 2);
         }
+        if (this.gpuPanelCompute) {
+          this.resizePanel(this.gpuPanelCompute, 3);
+        }
       })
     }
 
 
   }
 
-  patchThreeRenderer(renderer: THREE.WebGLRenderer) {
+  patchThreeRenderer(renderer: any) {
 
     // Store the original render method
     const originalRenderMethod = renderer.render;
@@ -123,7 +135,9 @@ class Stats {
     const statsInstance = this;
 
     // Override the render method on the prototype
-    renderer.render = function(scene, camera) {
+    renderer.render = function (scene: THREE.Scene, camera: THREE.Camera) {
+
+
       statsInstance.begin(); // Start tracking for this render call
 
       // Call the original render method
@@ -131,6 +145,7 @@ class Stats {
 
       statsInstance.end(); // End tracking for this render call
     };
+
 
     this.threeRendererPatched = true;
 
@@ -185,7 +200,7 @@ class Stats {
 
   }
 
-  init(canvasOrGL: HTMLCanvasElement | OffscreenCanvas | WebGL2RenderingContext) {
+  async init(canvasOrGL: any) {
     if (!canvasOrGL) {
       console.error('Stats: The "canvas" parameter is undefined.');
       return;
@@ -202,12 +217,23 @@ class Stats {
       const canvas: any = canvasOrGL
       this.patchThreeRenderer(canvas as any);
       this.gl = canvas.getContext();
-    }
-
-    // Check if canvasOrGL is already a WebGL2RenderingContext
-    if (!this.gl && canvasOrGL instanceof WebGL2RenderingContext) {
+    } else if (!this.gl && canvasOrGL instanceof WebGL2RenderingContext) {
       this.gl = canvasOrGL;
     }
+
+    if (canvasOrGL.isWebGPURenderer) {
+
+      canvasOrGL.backend.trackTimestamp = true
+
+      if (await canvasOrGL.hasFeatureAsync('timestamp-query')) {
+        this.gpuPanel = this.addPanel(new Stats.Panel('GPU', '#ff0', '#220'), 2);
+        this.gpuPanelCompute = this.addPanel(new Stats.Panel('CPT', '#e1e1e1', '#212121'), 3);
+        this.info = canvasOrGL.info
+      }
+      return;
+    }
+    // Check if canvasOrGL is already a WebGL2RenderingContext
+
 
     // Handle HTMLCanvasElement and OffscreenCanvas
     else if (!this.gl && canvasOrGL instanceof HTMLCanvasElement || canvasOrGL instanceof OffscreenCanvas) {
@@ -236,7 +262,7 @@ class Stats {
     }
 
     if (!this.gl || !this.ext) return;
-  
+
     if (this.gl && this.ext) {
       if (this.activeQuery) {
         // End the previous query if it's still active
@@ -267,8 +293,10 @@ class Stats {
   }
 
   processGpuQueries() {
+
+
     if (!this.gl || !this.ext) return;
-  
+
     this.totalGpuDuration = 0;
 
     this.gpuQueries.forEach((queryInfo, index) => {
@@ -289,22 +317,35 @@ class Stats {
   }
 
   update() {
-  
-    this.processGpuQueries();
+
+    if (this.info === undefined) {
+      this.processGpuQueries();
+    } else {
+
+      this.totalGpuDuration = this.info.render.timestamp
+      this.totalGpuDurationCompute = this.info.compute.timestamp
+      this.addToAverage(this.totalGpuDurationCompute, this.averageGpuCompute);
+
+    }
+
     this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
 
     // Calculate the total duration of CPU and GPU work for this frame
-    this.addToAverage(this.totalCpuDuration , this.averageCpu);
+    this.addToAverage(this.totalCpuDuration, this.averageCpu);
     this.addToAverage(this.totalGpuDuration, this.averageGpu);
 
     this.renderCount = 0;
+
+    // If this.totalCpuDuration is 0, it means that the CPU query was not created and stats.begin() never called/overrided
+    if (this.totalCpuDuration === 0) {
+      this.beginProfiling('cpu-started');
+    }
+
     this.totalCpuDuration = 0;
-    this.totalGpuDuration = 0;
+
     this.totalFps = 0;
 
     this.beginTime = this.endInternal()
-
-
 
   }
 
@@ -316,6 +357,10 @@ class Stats {
     if (time >= this.prevCpuTime + 1000 / this.logsPerSecond) {
       this.updatePanel(this.msPanel, this.averageCpu);
       this.updatePanel(this.gpuPanel, this.averageGpu);
+
+      if (this.gpuPanelCompute) {
+        this.updatePanel(this.gpuPanelCompute, this.averageGpuCompute);
+      }
 
       this.prevCpuTime = time;
     }
@@ -415,16 +460,16 @@ class Stats {
 
   get domElement() {
     // patch for some use case in threejs
-		return this.dom;
+    return this.dom;
 
-	}
+  }
 
   get container() { // @deprecated
 
-		console.warn('Stats: Deprecated! this.container as been replaced to this.dom ')
-		return this.dom;
+    console.warn('Stats: Deprecated! this.container as been replaced to this.dom ')
+    return this.dom;
 
-	}
+  }
 
 }
 
