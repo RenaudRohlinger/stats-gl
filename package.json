@@ -27,13 +27,15 @@
     "build": "tsc && vite build && rollup -c && node ./scripts/copyBuild.js",
     "preview": "vite preview"
   },
+  "dependencies": {
+    "@types/three": "^0.163.0"
+  },
   "devDependencies": {
-    "@types/three": "^0.162.0",
     "fs-extra": "^11.1.1",
     "path": "^0.12.7",
     "rollup": "^4.12.1",
     "rollup-plugin-dts": "^5.3.0",
-    "three": "^0.162.0",
+    "three": "^0.163.0",
     "typescript": "^5.0.2",
     "vite": "^4.5.2"
   }
