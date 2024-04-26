@@ -28,7 +28,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@types/three": "^0.163.0"
+    "@types/three": "*"
   },
   "devDependencies": {
     "fs-extra": "^11.1.1",
