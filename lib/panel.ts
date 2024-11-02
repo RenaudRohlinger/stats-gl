@@ -19,8 +19,8 @@ class Panel {
         this.name = name;
         this.fg = fg;
         this.bg = bg;
-        this.PR = Math.round( window.devicePixelRatio || 1 );
-        
+        this.PR = Math.round(window.devicePixelRatio || 1);
+
         this.WIDTH = 90 * this.PR;
         this.HEIGHT = 48 * this.PR;
         this.TEXT_X = 3 * this.PR;
@@ -84,4 +84,4 @@ class Panel {
     }
 };
 
-export default Panel;
+export { Panel };

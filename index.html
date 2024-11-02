@@ -147,8 +147,8 @@
 
 <span class="keyword">import</span> Stats <span class="keyword">from</span> <span class="string">'stats-gl'</span>
 
-<span class="keyword">const</span> stats = <span class="keyword">new</span> Stats();
-<span class="keyword">const</span> renderer = <span class="keyword">new</span> THREE.WebGLRenderer();
+<span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true });
+<span class="keyword">const</span> renderer = <span class="keyword">new</span> THREE.WebGPURenderer();
 stats.init( renderer );
 container.appendChild( stats.dom );
 
@@ -175,71 +175,44 @@ container.appendChild( stats.dom );
       >
     </div>
 
-    <script
-      async
-      src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
-
     <script type="importmap">
       {
         "imports": {
-          "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
-          "three/addons": "https://unpkg.com/three@0.162.0/examples/jsm/"
+          "three": "https://cdn.skypack.dev/three/build/three.webgpu.min.js",
+          "three/addons": "https://cdn.skypack.dev/three/examples/jsm/"
         }
       }
     </script>
 
     <script type="module">
-      import Stats from './dist/main.js';
-      // import Stats from './lib/main.ts';
+      import * as THREE from 'three';
 
-      import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
-      // import WebGPURenderer from 'https://unpkg.com/three@0.162.0/examples/jsm/renderers/webgpu/WebGPURenderer.js';
+      // import Stats from './dist/main.js';
+      import Stats from './lib/main.ts';
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+      import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
-      import { OrbitControls } from 'https://unpkg.com/three@0.162.0/examples/jsm/controls/OrbitControls.js';
-      import { RoomEnvironment } from 'https://unpkg.com/three@0.162.0/examples/jsm/environments/RoomEnvironment.js';
-      // import StorageInstancedBufferAttribute from 'https://unpkg.com/three@0.162.0/examples/jsm/renderers/common/StorageInstancedBufferAttribute.js';
-      // import { tslFn, instanceIndex, float, vec3, storage } from 'three/nodes';
-
-      import { GLTFLoader } from 'https://unpkg.com/three@0.162.0/examples/jsm/loaders/GLTFLoader.js';
-      import { DRACOLoader } from 'https://unpkg.com/three@0.162.0/examples/jsm/loaders/DRACOLoader.js';
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
       let mixer;
 
       const clock = new THREE.Clock();
       const container = document.getElementById('container');
 
-      const stats = new Stats();
+      const stats = new Stats({
+        trackGPU: true,
+      });
       container.appendChild(stats.dom);
 
-      const renderer = new THREE.WebGLRenderer({
+      const renderer = new THREE.WebGPURenderer({
         antialias: true,
       });
-      // const renderer = new WebGPURenderer({
-      //   antialias: true,
-      //   forceWebGL: false,
-      // });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
 
-      // const pmremGenerator = new THREE.PMREMGenerator(renderer);
-
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0xbfe3dd);
-      // scene.environment = pmremGenerator.fromScene(
-      //   new RoomEnvironment(),
-      //   0.04
-      // ).texture;
-
-      // const positionBuffer = storage(
-      //   new StorageInstancedBufferAttribute(10, 3),
-      //   'vec3',
-      //   10
-      // );
-
-      // const compute = tslFn(() => {
-      //   const position = positionBuffer.element(instanceIndex);
-      // })().compute(10);
 
       const camera = new THREE.PerspectiveCamera(
         40,
@@ -255,22 +228,16 @@ container.appendChild( stats.dom );
       controls.enablePan = false;
       controls.enableDamping = true;
 
-      const dracoLoader = new DRACOLoader();
-      dracoLoader.setDecoderPath(
-        'https://unpkg.com/three@0.162.0/examples/jsm/libs/draco/gltf/'
-      );
-
       scene.add(new THREE.AmbientLight(0xf1f1ff, 1.5));
       const light = new THREE.DirectionalLight(0xffffff, 2);
       scene.add(light);
       const loader = new GLTFLoader();
-      loader.setDRACOLoader(dracoLoader);
       loader.load(
-        './demo/LittlestTokyo.glb',
+        './demo/Flamingo.glb',
         function (gltf) {
           const model = gltf.scene;
           model.position.set(1, 1, 0);
-          model.scale.set(0.01, 0.01, 0.01);
+          model.scale.set(0.025, 0.025, 0.025);
           scene.add(model);
 
           mixer = new THREE.AnimationMixer(model);

@@ -34,13 +34,14 @@ import Stats from "stats-gl";
 
 // create a new Stats object
 const stats = new Stats({
-    logsPerSecond: 20, 
+    trackGPU: false,
+    logsPerSecond: 20,
     samplesLog: 100, 
     samplesGraph: 10, 
     precision: 2, 
     horizontal: true,
     minimal: false, 
-    mode: 0 
+    mode: 0
 });
 
 // append the stats container to the body of the document
