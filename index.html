@@ -186,10 +186,35 @@ container.appendChild( stats.dom );
     <script type="module">
       import * as THREE from 'three';
 
-      import Stats from './lib/main.ts';
+      import Stats from './dist/main.js';
+      // import Stats from './lib/main.ts';
       import { OrbitControls } from 'https://unpkg.com/three@0.170.0/examples/jsm/controls/OrbitControls.js';
 
       import { GLTFLoader } from 'https://unpkg.com/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
+      import {
+        storage,
+        instanceIndex,
+        If,
+        vec3,
+        uv,
+        uint,
+        float,
+        Fn,
+      } from 'three/tsl';
+
+      const size = 32;
+      const array = new Array(size).fill(0);
+
+      const arrayBuffer = new THREE.StorageInstancedBufferAttribute(
+        new Float32Array(array),
+        3
+      );
+
+      const compute = Fn(() => {
+        storage(arrayBuffer, 'vec3', size)
+          .element(instanceIndex)
+          .assign(instanceIndex);
+      })().compute(size);
 
       let mixer;
 
@@ -240,7 +265,7 @@ container.appendChild( stats.dom );
           mixer = new THREE.AnimationMixer(model);
           mixer.clipAction(gltf.animations[0]).play();
 
-          animate();
+          renderer.setAnimationLoop(animate);
 
           stats.init(renderer);
         },
@@ -258,17 +283,14 @@ container.appendChild( stats.dom );
       };
 
       async function animate() {
-        requestAnimationFrame(animate);
-
         const delta = clock.getDelta();
 
         mixer.update(delta);
 
         controls.update();
 
-        renderer.renderAsync(scene, camera);
-        // renderer.renderAsync(scene, camera);
-        // renderer.computeAsync(compute);
+        await renderer.renderAsync(scene, camera);
+        await renderer.computeAsync(compute);
         stats.update();
       }
     </script>

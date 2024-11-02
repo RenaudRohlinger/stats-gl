@@ -4,6 +4,7 @@ import { Panel } from './panel';
 interface StatsOptions {
   trackGPU?: boolean;
   logsPerSecond?: number;
+  graphsPerSecond?: number;
   samplesLog?: number;
   samplesGraph?: number;
   precision?: number;
@@ -40,6 +41,7 @@ class Stats {
   private samplesGraph: number;
   private precision: number;
   private logsPerSecond: number;
+  private graphsPerSecond: number;
 
   private gl: WebGL2RenderingContext | null = null;
   private ext: any | null = null;
@@ -51,14 +53,14 @@ class Stats {
   private beginTime: number;
   private prevTime: number;
   private prevCpuTime: number;
-  private frames = 0;
+  private frameTimes: number[] = [];  // Store frame timestamps
+
   private renderCount = 0;
   private isRunningCPUProfiling = false;
 
   private totalCpuDuration = 0;
   private totalGpuDuration = 0;
   private totalGpuDurationCompute = 0;
-  private totalFps = 0;
 
   private fpsPanel: Panel;
   private msPanel: Panel;
@@ -70,12 +72,21 @@ class Stats {
   private averageGpu: AverageData = { logs: [], graph: [] };
   private averageGpuCompute: AverageData = { logs: [], graph: [] };
 
+  private updateCounter = 0;
+  private prevGraphTime: number;
+  private lastMin: { [key: string]: number } = {};
+  private lastMax: { [key: string]: number } = {};
+  private lastValue: { [key: string]: number } = {};
+  private prevTextTime: number;
+
+
   static Panel = Panel;
 
   constructor({
     trackGPU = false,
-    logsPerSecond = 30,
-    samplesLog = 60,
+    logsPerSecond = 4,
+    graphsPerSecond = 30,
+    samplesLog = 40,
     samplesGraph = 10,
     precision = 2,
     minimal = false,
@@ -90,6 +101,9 @@ class Stats {
     this.samplesGraph = samplesGraph;
     this.precision = precision;
     this.logsPerSecond = logsPerSecond;
+    this.graphsPerSecond = graphsPerSecond;
+    const prevGraphTime = performance.now();
+    this.prevGraphTime = prevGraphTime
 
     // Initialize DOM
     this.dom = document.createElement('div');
@@ -98,6 +112,8 @@ class Stats {
     // Initialize timing
     this.beginTime = performance.now();
     this.prevTime = this.beginTime;
+    this.prevTextTime = this.beginTime;
+
     this.prevCpuTime = this.beginTime;
 
     // Create panels
@@ -248,38 +264,34 @@ class Stats {
   }
 
   public update(): void {
+    // Always end the current CPU profiling if it's running
+    if (this.isRunningCPUProfiling) {
+      this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
+      // Add to averages immediately after getting the duration
+      // this.addToAverage(this.totalCpuDuration, this.averageCpu);
+    }
+
     if (!this.info) {
       this.processGpuQueries();
     } else {
       this.processWebGPUTimestamps();
     }
 
-    this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
-    this.updateAverages();
+    this.updateAverages()
     this.resetCounters();
   }
 
   private processWebGPUTimestamps(): void {
     this.totalGpuDuration = this.info!.render.timestamp;
     this.totalGpuDurationCompute = this.info!.compute.timestamp;
-    this.addToAverage(this.totalGpuDurationCompute, this.averageGpuCompute);
-  }
-
-  private updateAverages(): void {
-    this.addToAverage(this.totalCpuDuration, this.averageCpu);
-    this.addToAverage(this.totalGpuDuration, this.averageGpu);
   }
 
   private resetCounters(): void {
     this.renderCount = 0;
-    if (this.totalCpuDuration === 0) {
-      this.beginProfiling('cpu-started');
-    }
     this.totalCpuDuration = 0;
-    this.totalFps = 0;
+    this.beginProfiling('cpu-started');
     this.beginTime = this.endInternal();
   }
-
 
   resizePanel(panel: Panel, offset: number) {
 
@@ -355,54 +367,95 @@ class Stats {
   }
 
   endInternal() {
+    const currentTime = performance.now();
 
-    this.frames++;
-    const time = (performance || Date).now();
-    const elapsed = time - this.prevTime;
+    this.frameTimes.push(currentTime);
 
-    // Calculate FPS more frequently based on logsPerSecond
-    if (time >= this.prevCpuTime + 1000 / this.logsPerSecond) {
-      // Calculate FPS and round to nearest integer
-      const fps = Math.round((this.frames * 1000) / elapsed);
-
-      // Add to FPS averages
-      this.addToAverage(fps, this.averageFps);
-
-      // Update all panels
-      this.updatePanel(this.fpsPanel, this.averageFps, 0);
-      this.updatePanel(this.msPanel, this.averageCpu, this.precision);
-      this.updatePanel(this.gpuPanel, this.averageGpu, this.precision);
-
-      if (this.gpuPanelCompute) {
-        this.updatePanel(this.gpuPanelCompute, this.averageGpuCompute);
-      }
-
-      // Reset frame counter for next interval
-      this.frames = 0;
-      this.prevCpuTime = time;
-      this.prevTime = time;
+    // Remove frames older than 1 second
+    while (this.frameTimes.length > 0 && this.frameTimes[0] <= currentTime - 1000) {
+      this.frameTimes.shift();
     }
 
-    return time;
+    // Calculate FPS based on frames in the last second
+    const fps = Math.round(this.frameTimes.length);
 
+    this.addToAverage(fps, this.averageFps);
+
+    const shouldUpdateText = currentTime >= this.prevTextTime + 1000 / this.logsPerSecond;
+    const shouldUpdateGraph = currentTime >= this.prevGraphTime + 1000 / this.graphsPerSecond;
+
+    this.updatePanelComponents(this.fpsPanel, this.averageFps, 0, shouldUpdateText, shouldUpdateGraph);
+    this.updatePanelComponents(this.msPanel, this.averageCpu, this.precision, shouldUpdateText, shouldUpdateGraph);
+    if (this.gpuPanel) {
+      this.updatePanelComponents(this.gpuPanel, this.averageGpu, this.precision, shouldUpdateText, shouldUpdateGraph);
+    }
+    if (this.gpuPanelCompute) {
+      this.updatePanelComponents(this.gpuPanelCompute, this.averageGpuCompute, this.precision, shouldUpdateText, shouldUpdateGraph);
+    }
+
+    if (shouldUpdateText) {
+      this.prevTextTime = currentTime;
+    }
+    if (shouldUpdateGraph) {
+      this.prevGraphTime = currentTime;
+    }
+
+    return currentTime;
   }
 
-  addToAverage(value: number, averageArray: { logs: any; graph: any; }) {
+  private updatePanelComponents(
+    panel: Panel | null,
+    averageArray: { logs: number[], graph: number[] },
+    precision: number,
+    shouldUpdateText: boolean,
+    shouldUpdateGraph: boolean
+  ) {
+    if (!panel || averageArray.logs.length === 0) return;
 
-    averageArray.logs.push(value);
-    if (averageArray.logs.length > this.samplesLog) {
-
-      averageArray.logs.shift();
-
+    // Initialize tracking for this panel if not exists
+    if (!(panel.name in this.lastMin)) {
+      this.lastMin[panel.name] = Infinity;
+      this.lastMax[panel.name] = 0;
+      this.lastValue[panel.name] = 0;
     }
 
-    averageArray.graph.push(value);
-    if (averageArray.graph.length > this.samplesGraph) {
+    const currentValue = averageArray.logs[averageArray.logs.length - 1];
+    const recentMax = Math.max(...averageArray.logs.slice(-30));
 
-      averageArray.graph.shift();
+    this.lastMin[panel.name] = Math.min(this.lastMin[panel.name], currentValue);
+    this.lastMax[panel.name] = Math.max(this.lastMax[panel.name], currentValue);
 
+    // Smooth the display value
+    this.lastValue[panel.name] = this.lastValue[panel.name] * 0.7 + currentValue * 0.3;
+
+    const graphMax = Math.max(recentMax, ...averageArray.graph.slice(-this.samplesGraph));
+
+    this.updateCounter++;
+
+    // Reset min/max periodically
+    if (this.updateCounter % (this.logsPerSecond * 2) === 0) {
+      this.lastMax[panel.name] = recentMax;
+      this.lastMin[panel.name] = currentValue;
     }
 
+    // Update text if it's time
+    if (shouldUpdateText) {
+      panel.update(
+        this.lastValue[panel.name],
+        currentValue,
+        this.lastMax[panel.name],
+        graphMax,
+        precision
+      );
+    }
+
+    // Update graph if it's time
+    if (shouldUpdateGraph) {
+      panel.updateGraph(
+        currentValue,
+        graphMax
+      );
+    }
   }
 
   beginProfiling(marker: string) {
@@ -429,39 +482,88 @@ class Stats {
 
   }
 
-  updatePanel(panel: { update: any; } | null, averageArray: { logs: number[], graph: number[] }, precision = 2) {
+  updatePanel(panel: { update: any; updateGraph: any; name: string; } | null, averageArray: { logs: number[], graph: number[] }, precision = 2) {
+    if (!panel || averageArray.logs.length === 0) return;
 
-    if (averageArray.logs.length > 0) {
+    const currentTime = performance.now();
 
-      let sumLog = 0;
-      let max = 0.01;
+    // Initialize tracking for this panel if not exists
+    if (!(panel.name in this.lastMin)) {
+      this.lastMin[panel.name] = Infinity;
+      this.lastMax[panel.name] = 0;
+      this.lastValue[panel.name] = 0;
+    }
 
-      for (let i = 0; i < averageArray.logs.length; i++) {
+    // Get the current value and recent max
+    const currentValue = averageArray.logs[averageArray.logs.length - 1];
+    const recentMax = Math.max(...averageArray.logs.slice(-30));
 
-        sumLog += averageArray.logs[i];
+    // Update running statistics
+    this.lastMin[panel.name] = Math.min(this.lastMin[panel.name], currentValue);
+    this.lastMax[panel.name] = Math.max(this.lastMax[panel.name], currentValue);
 
-        if (averageArray.logs[i] > max) {
-          max = averageArray.logs[i];
-        }
+    // Smooth the display value
+    this.lastValue[panel.name] = this.lastValue[panel.name] * 0.7 + currentValue * 0.3;
 
+    // Calculate graph scaling value
+    const graphMax = Math.max(recentMax, ...averageArray.graph.slice(-this.samplesGraph));
+
+    this.updateCounter++;
+
+    // Reset min/max periodically
+    if (this.updateCounter % (this.logsPerSecond * 2) === 0) {
+      this.lastMax[panel.name] = recentMax;
+      this.lastMin[panel.name] = currentValue;
+    }
+
+    if (panel.update) {
+      // Check if it's time to update the text (based on logsPerSecond)
+      if (currentTime >= this.prevCpuTime + 1000 / this.logsPerSecond) {
+        panel.update(
+          this.lastValue[panel.name],
+          currentValue,
+          this.lastMax[panel.name],
+          graphMax,
+          precision
+        );
       }
 
-      let sumGraph = 0;
-      let maxGraph = 0.01;
-      for (let i = 0; i < averageArray.graph.length; i++) {
-
-        sumGraph += averageArray.graph[i];
-
-        if (averageArray.graph[i] > maxGraph) {
-          maxGraph = averageArray.graph[i];
-        }
-
+      // Check if it's time to update the graph (based on graphsPerSecond)
+      if (currentTime >= this.prevGraphTime + 1000 / this.graphsPerSecond) {
+        panel.updateGraph(
+          currentValue,
+          graphMax
+        );
+        this.prevGraphTime = currentTime;
       }
+    }
+  }
 
-      if (panel) {
-        panel.update(sumLog / Math.min(averageArray.logs.length, this.samplesLog), sumGraph / Math.min(averageArray.graph.length, this.samplesGraph), max, maxGraph, precision);
-      }
+  private updateAverages(): void {
+    this.addToAverage(this.totalCpuDuration, this.averageCpu);
+    this.addToAverage(this.totalGpuDuration, this.averageGpu);
+    // Add GPU Compute to the main update flow
+    if (this.info && this.totalGpuDurationCompute !== undefined) {
+      this.addToAverage(this.totalGpuDurationCompute, this.averageGpuCompute);
+    }
+  }
 
+  addToAverage(value: number, averageArray: { logs: any; graph: any; }) {
+    // Validate value
+    // if (value === undefined || value === null || isNaN(value)) {
+    //   return;
+    // }
+
+    // Store raw values for logs
+    averageArray.logs.push(value);
+    if (averageArray.logs.length > this.samplesLog) {
+      averageArray.logs = averageArray.logs.slice(-this.samplesLog);
+    }
+
+    // For graph, store raw values
+    averageArray.graph.push(value);
+    if (averageArray.graph.length > this.samplesGraph) {
+      averageArray.graph = averageArray.graph.slice(-this.samplesGraph);
     }
   }
 

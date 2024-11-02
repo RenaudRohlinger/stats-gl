@@ -40,6 +40,7 @@ class Panel {
         this.canvas.style.cssText = 'width:90px;height:48px';
 
         this.context = this.canvas.getContext('2d');
+
         this.initializeCanvas();
     }
 
@@ -57,17 +58,17 @@ class Panel {
         const endColor: string = this.fg;
 
         switch (this.fg.toLowerCase()) {
-            case '#0ff': // Cyan
-                startColor = '#006666'; // Dark Cyan
+            case '#0ff':
+                startColor = '#006666';
                 break;
-            case '#0f0': // Green
-                startColor = '#006600'; // Dark Green
+            case '#0f0':
+                startColor = '#006600';
                 break;
-            case '#ff0': // Yellow
-                startColor = '#666600'; // Dark Yellow
+            case '#ff0':
+                startColor = '#666600';
                 break;
-            case '#e1e1e1': // Light Gray
-                startColor = '#666666'; // Medium Gray
+            case '#e1e1e1':
+                startColor = '#666666';
                 break;
             default:
                 startColor = this.bg;
@@ -83,44 +84,35 @@ class Panel {
     private initializeCanvas() {
         if (!this.context) return;
 
+        this.context.imageSmoothingEnabled = false;
+
         this.context.font = 'bold ' + (9 * this.PR) + 'px Helvetica,Arial,sans-serif';
         this.context.textBaseline = 'top';
 
-        // Create gradient
         this.gradient = this.createGradient();
 
-        // Fill background
         this.context.fillStyle = this.bg;
         this.context.fillRect(0, 0, this.WIDTH, this.HEIGHT);
 
-        // Draw text
         this.context.fillStyle = this.fg;
         this.context.fillText(this.name, this.TEXT_X, this.TEXT_Y);
 
-        // Draw initial graph area
         this.context.fillStyle = this.fg;
         this.context.fillRect(this.GRAPH_X, this.GRAPH_Y, this.GRAPH_WIDTH, this.GRAPH_HEIGHT);
 
-        // Apply semi-transparent background
         this.context.fillStyle = this.bg;
         this.context.globalAlpha = 0.9;
         this.context.fillRect(this.GRAPH_X, this.GRAPH_Y, this.GRAPH_WIDTH, this.GRAPH_HEIGHT);
     }
 
-    update(
-        value: number,
-        valueGraph: number,
-        maxValue: number,
-        maxGraph: number,
-        decimals = 0
-    ) {
+    // Update only text portion
+    update(value: number, valueGraph: number, maxValue: number, maxGraph: number, decimals = 0) {
         if (!this.context || !this.gradient) return;
 
         const min = Math.min(Infinity, value);
         const max = Math.max(maxValue, value);
-        maxGraph = Math.max(maxGraph, valueGraph);
 
-        // Clear and redraw background
+        // Clear only the text area (from top to GRAPH_Y)
         this.context.globalAlpha = 1;
         this.context.fillStyle = this.bg;
         this.context.fillRect(0, 0, this.WIDTH, this.GRAPH_Y);
@@ -128,39 +120,73 @@ class Panel {
         // Draw text
         this.context.fillStyle = this.fg;
         this.context.fillText(
-            `${value.toFixed(decimals)} ${this.name} (${min.toFixed(decimals)}-${parseFloat(
-                max.toFixed(decimals)
-            )})`,
+            `${value.toFixed(decimals)} ${this.name} (${min.toFixed(decimals)}-${parseFloat(max.toFixed(decimals))})`,
             this.TEXT_X,
             this.TEXT_Y
         );
+    }
+
+    // Update only graph portion
+    updateGraph(valueGraph: number, maxGraph: number) {
+        if (!this.context || !this.gradient) return;
+
+        // Handle zero values appropriately
+        if (valueGraph === 0 && maxGraph === 0) {
+            maxGraph = 1; // Prevent division by zero
+        }
+
+        // Ensure maxGraph is valid and values are positive
+        maxGraph = Math.max(maxGraph, valueGraph, 0.1);
+        valueGraph = Math.max(valueGraph, 0);
+
+        // Ensure all coordinates are rounded to avoid sub-pixel rendering
+        const graphX = Math.round(this.GRAPH_X);
+        const graphY = Math.round(this.GRAPH_Y);
+        const graphWidth = Math.round(this.GRAPH_WIDTH);
+        const graphHeight = Math.round(this.GRAPH_HEIGHT);
+        const pr = Math.round(this.PR);
 
         // Shift the graph left
         this.context.drawImage(
             this.canvas,
-            this.GRAPH_X + this.PR,
-            this.GRAPH_Y,
-            this.GRAPH_WIDTH - this.PR,
-            this.GRAPH_HEIGHT,
-            this.GRAPH_X,
-            this.GRAPH_Y,
-            this.GRAPH_WIDTH - this.PR,
-            this.GRAPH_HEIGHT
+            graphX + pr,
+            graphY,
+            graphWidth - pr,
+            graphHeight,
+            graphX,
+            graphY,
+            graphWidth - pr,
+            graphHeight
         );
 
-        // Draw new column with gradient
-        const columnHeight = this.GRAPH_HEIGHT - (1 - valueGraph / maxGraph) * this.GRAPH_HEIGHT;
+        // Clear only the new column area
+        this.context.fillStyle = this.bg;
+        this.context.fillRect(
+            graphX + graphWidth - pr,
+            graphY,
+            pr,
+            graphHeight
+        );
 
+        // Calculate column height
+        const columnHeight = Math.min(
+            graphHeight,
+            Math.round(valueGraph / maxGraph * graphHeight)
+        );
+
+        // Draw the gradient column
         if (columnHeight > 0) {
-            this.context.globalAlpha = 1;
+            this.context.globalAlpha = 0.9;
             this.context.fillStyle = this.gradient;
             this.context.fillRect(
-                this.GRAPH_X + this.GRAPH_WIDTH - this.PR,
-                this.GRAPH_Y + this.GRAPH_HEIGHT - columnHeight,
-                this.PR,
+                graphX + graphWidth - pr,
+                graphY + (graphHeight - columnHeight),
+                pr,
                 columnHeight
             );
         }
+
+        this.context.globalAlpha = 1;
     }
 }
 
