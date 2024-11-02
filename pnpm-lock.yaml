@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@types/three':
-        specifier: ^0.169.0
+        specifier: '*'
         version: 0.169.0
       three:
         specifier: ^0.170.0

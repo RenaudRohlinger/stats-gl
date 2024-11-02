@@ -14,7 +14,7 @@
   "main": "./dist/main.cjs",
   "module": "./dist/main.js",
   "exports": {
-    ".": {
+  ".": {
       "types": "./dist/stats-gl.d.ts",
       "require": "./dist/main.cjs",
       "import": "./dist/main.js"
@@ -28,7 +28,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@types/three": "^0.169.0",
+    "@types/three": "*",
     "three": "^0.170.0"
   },
   "devDependencies": {
@@ -38,5 +38,9 @@
     "rollup-plugin-dts": "^5.3.1",
     "typescript": "^5.6.3",
     "vite": "^4.5.5"
+  },
+  "peerDependencies": {
+    "three": "*",
+    "@types/three": "*"
   }
 }
