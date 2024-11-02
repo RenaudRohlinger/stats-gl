@@ -85,7 +85,6 @@ class Stats {
     this.horizontal = horizontal;
     this.minimal = minimal;
     this.trackGPU = trackGPU;
-    console.log('trackGPU', trackGPU);
     this.samplesLog = samplesLog;
     this.samplesGraph = samplesGraph;
     this.precision = precision;
@@ -167,10 +166,8 @@ class Stats {
   }
 
   private async handleWebGPURenderer(renderer: any): Promise<boolean> {
-    console.log('renderer', renderer);
     if (renderer.isWebGPURenderer) {
       if (this.trackGPU) {
-        console.log('trackGPU', this.trackGPU);
         renderer.backend.trackTimestamp = true;
         if (await renderer.hasFeatureAsync('timestamp-query')) {
           this.initializeWebGPUPanels();
