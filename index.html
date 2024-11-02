@@ -178,8 +178,7 @@ container.appendChild( stats.dom );
     <script type="importmap">
       {
         "imports": {
-          "three": "https://unpkg.com/three@0.170.0/build/three.webgpu.js",
-          "three/addons": "https://unpkg.com/three@0.170.0/examples/jsm/"
+          "three": "https://unpkg.com/three@0.170.0/build/three.webgpu.js"
         }
       }
     </script>
@@ -188,9 +187,9 @@ container.appendChild( stats.dom );
       import * as THREE from 'three';
 
       import Stats from './dist/main.js';
-      import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+      import { OrbitControls } from 'https://unpkg.com/three@0.170.0/examples/jsm/controls/OrbitControls.js';
 
-      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+      import { GLTFLoader } from 'https://unpkg.com/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
 
       let mixer;
 
