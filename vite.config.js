@@ -15,6 +15,7 @@ export default defineConfig({
     alias: {
       'three/ShaderChunk': 'three/examples/jsm/shaders/ShaderChunk',
       'three/UniformsLib': 'three/examples/jsm/shaders/UniformsLib',
+      'three/webgpu': 'three',
       'three/addons': 'three/examples/jsm',
       'three/tsl': 'three/webgpu',
       three: 'three/webgpu',
