@@ -175,22 +175,11 @@ container.appendChild( stats.dom );
       >
     </div>
 
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://cdn.skypack.dev/three/build/three.webgpu.min.js",
-          "three/addons": "https://cdn.skypack.dev/three/examples/jsm/"
-        }
-      }
-    </script>
-
     <script type="module">
       import * as THREE from 'three';
 
-      // import Stats from './dist/main.js';
-      import Stats from './lib/main.ts';
+      import Stats from './dist/main.js';
       import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-      import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
       import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
