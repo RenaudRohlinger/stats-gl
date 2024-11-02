@@ -175,6 +175,15 @@ container.appendChild( stats.dom );
       >
     </div>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.170.0/build/three.webgpu.js",
+          "three/addons": "https://unpkg.com/three@0.170.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script type="module">
       import * as THREE from 'three';
 
