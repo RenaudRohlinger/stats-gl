@@ -65,6 +65,7 @@ class Stats {
   private gpuPanel: Panel | null = null;
   private gpuPanelCompute: Panel | null = null;
 
+  private averageFps: AverageData = { logs: [], graph: [] };
   private averageCpu: AverageData = { logs: [], graph: [] };
   private averageGpu: AverageData = { logs: [], graph: [] };
   private averageGpuCompute: AverageData = { logs: [], graph: [] };
@@ -73,8 +74,8 @@ class Stats {
 
   constructor({
     trackGPU = false,
-    logsPerSecond = 20,
-    samplesLog = 100,
+    logsPerSecond = 30,
+    samplesLog = 60,
     samplesGraph = 10,
     precision = 2,
     minimal = false,
@@ -105,6 +106,7 @@ class Stats {
 
     this.setupEventListeners();
   }
+
 
   private initializeDOM(): void {
     this.dom.style.cssText = `
@@ -356,27 +358,29 @@ class Stats {
 
     this.frames++;
     const time = (performance || Date).now();
+    const elapsed = time - this.prevTime;
 
+    // Calculate FPS more frequently based on logsPerSecond
     if (time >= this.prevCpuTime + 1000 / this.logsPerSecond) {
-      this.updatePanel(this.msPanel, this.averageCpu);
-      this.updatePanel(this.gpuPanel, this.averageGpu);
+      // Calculate FPS and round to nearest integer
+      const fps = Math.round((this.frames * 1000) / elapsed);
+
+      // Add to FPS averages
+      this.addToAverage(fps, this.averageFps);
+
+      // Update all panels
+      this.updatePanel(this.fpsPanel, this.averageFps, 0);
+      this.updatePanel(this.msPanel, this.averageCpu, this.precision);
+      this.updatePanel(this.gpuPanel, this.averageGpu, this.precision);
 
       if (this.gpuPanelCompute) {
         this.updatePanel(this.gpuPanelCompute, this.averageGpuCompute);
       }
 
-      this.prevCpuTime = time;
-    }
-
-    if (time >= this.prevTime + 1000) {
-
-      const fps = (this.frames * 1000) / (time - this.prevTime);
-
-      this.fpsPanel.update(fps, fps, 100, 100, 0);
-
-      this.prevTime = time;
+      // Reset frame counter for next interval
       this.frames = 0;
-
+      this.prevCpuTime = time;
+      this.prevTime = time;
     }
 
     return time;
@@ -425,7 +429,7 @@ class Stats {
 
   }
 
-  updatePanel(panel: { update: any; } | null, averageArray: { logs: number[], graph: number[] }) {
+  updatePanel(panel: { update: any; } | null, averageArray: { logs: number[], graph: number[] }, precision = 2) {
 
     if (averageArray.logs.length > 0) {
 
@@ -455,7 +459,7 @@ class Stats {
       }
 
       if (panel) {
-        panel.update(sumLog / Math.min(averageArray.logs.length, this.samplesLog), sumGraph / Math.min(averageArray.graph.length, this.samplesGraph), max, maxGraph, this.precision);
+        panel.update(sumLog / Math.min(averageArray.logs.length, this.samplesLog), sumGraph / Math.min(averageArray.graph.length, this.samplesGraph), max, maxGraph, precision);
       }
 
     }
