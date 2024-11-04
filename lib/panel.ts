@@ -104,7 +104,7 @@ class Panel {
     }
 
     // Update only text portion
-    update(value: number, valueGraph: number, maxValue: number, maxGraph: number, decimals = 0) {
+    update(value: number, maxValue: number, decimals: number = 0) {
         if (!this.context || !this.gradient) return;
 
         const min = Math.min(Infinity, value);

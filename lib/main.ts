@@ -32,26 +32,25 @@ interface InfoData {
 }
 
 class Stats {
-  private dom: HTMLDivElement;
-  private mode: number;
-  private horizontal: boolean;
-  private minimal: boolean;
-  private trackGPU: boolean;
-  private samplesLog: number;
-  private samplesGraph: number;
-  private precision: number;
-  private logsPerSecond: number;
-  private graphsPerSecond: number;
+  public dom: HTMLDivElement;
+  public mode: number;
+  public horizontal: boolean;
+  public minimal: boolean;
+  public trackGPU: boolean;
+  public samplesLog: number;
+  public samplesGraph: number;
+  public precision: number;
+  public logsPerSecond: number;
+  public graphsPerSecond: number;
 
-  private gl: WebGL2RenderingContext | null = null;
-  private ext: any | null = null;
-  private info?: InfoData;
+  public gl: WebGL2RenderingContext | null = null;
+  public ext: any | null = null;
+  public info?: InfoData;
   private activeQuery: WebGLQuery | null = null;
   private gpuQueries: QueryInfo[] = [];
   private threeRendererPatched = false;
 
   private beginTime: number;
-  private prevTime: number;
   private prevCpuTime: number;
   private frameTimes: number[] = [];  // Store frame timestamps
 
@@ -67,10 +66,10 @@ class Stats {
   private gpuPanel: Panel | null = null;
   private gpuPanelCompute: Panel | null = null;
 
-  private averageFps: AverageData = { logs: [], graph: [] };
-  private averageCpu: AverageData = { logs: [], graph: [] };
-  private averageGpu: AverageData = { logs: [], graph: [] };
-  private averageGpuCompute: AverageData = { logs: [], graph: [] };
+  public averageFps: AverageData = { logs: [], graph: [] };
+  public averageCpu: AverageData = { logs: [], graph: [] };
+  public averageGpu: AverageData = { logs: [], graph: [] };
+  public averageGpuCompute: AverageData = { logs: [], graph: [] };
 
   private updateCounter = 0;
   private prevGraphTime: number;
@@ -111,7 +110,6 @@ class Stats {
 
     // Initialize timing
     this.beginTime = performance.now();
-    this.prevTime = this.beginTime;
     this.prevTextTime = this.beginTime;
 
     this.prevCpuTime = this.beginTime;
@@ -420,31 +418,26 @@ class Stats {
     }
 
     const currentValue = averageArray.logs[averageArray.logs.length - 1];
-    const recentMax = Math.max(...averageArray.logs.slice(-30));
 
+    this.lastMax[panel.name] = Math.max(...averageArray.logs);
     this.lastMin[panel.name] = Math.min(this.lastMin[panel.name], currentValue);
-    this.lastMax[panel.name] = Math.max(this.lastMax[panel.name], currentValue);
-
     // Smooth the display value
     this.lastValue[panel.name] = this.lastValue[panel.name] * 0.7 + currentValue * 0.3;
 
-    const graphMax = Math.max(recentMax, ...averageArray.graph.slice(-this.samplesGraph));
+    // Calculate graph max considering both recent values and graph history
+    const graphMax = Math.max(
+      Math.max(...averageArray.logs),
+      ...averageArray.graph.slice(-this.samplesGraph)
+    );
 
     this.updateCounter++;
 
-    // Reset min/max periodically
-    if (this.updateCounter % (this.logsPerSecond * 2) === 0) {
-      this.lastMax[panel.name] = recentMax;
-      this.lastMin[panel.name] = currentValue;
-    }
-
     // Update text if it's time
     if (shouldUpdateText) {
+      console.log(this.lastMax)
       panel.update(
         this.lastValue[panel.name],
-        currentValue,
         this.lastMax[panel.name],
-        graphMax,
         precision
       );
     }
