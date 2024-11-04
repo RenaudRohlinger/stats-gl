@@ -434,7 +434,6 @@ class Stats {
 
     // Update text if it's time
     if (shouldUpdateText) {
-      console.log(this.lastMax)
       panel.update(
         this.lastValue[panel.name],
         this.lastMax[panel.name],
