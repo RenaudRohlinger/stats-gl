@@ -23,7 +23,12 @@
         padding: 14px;
         background-color: #1e1e1ef8;
         color: #d4d4d4;
+        overflow: auto;
+        margin: 0;
         font-family: 'Courier New', Courier, monospace;
+        @media screen and (max-width: 608px) {
+          display: none;
+        }
       }
       .nav-tabs {
         display: flex;
