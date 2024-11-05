@@ -164,8 +164,15 @@ class Stats {
 
     if (this.handleThreeRenderer(canvasOrGL)) return;
     if (await this.handleWebGPURenderer(canvasOrGL)) return;
-    if (!this.initializeWebGL(canvasOrGL)) return;
 
+    if (this.initializeWebGL(canvasOrGL)) {
+      if (this.trackGPU) {
+        this.initializeGPUTracking();
+      }
+      return;
+    } else {
+      console.error('Stats-gl: Failed to initialize WebGL context');
+    }
   }
 
   private handleThreeRenderer(renderer: any): boolean {

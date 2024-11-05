@@ -61,6 +61,28 @@
           display: none;
         }
       }
+      .nav-tabs {
+        display: flex;
+        gap: 1px;
+        margin-top: -14px;
+        position: absolute;
+        right: 0;
+        margin-bottom: 14px;
+      }
+      .nav-tab {
+        background: #1e1e1ef8;
+        color: #d4d4d4;
+        padding: 4px 8px;
+        text-decoration: none;
+        font-size: 12px;
+        transition: background-color 0.2s;
+      }
+      .nav-tab:hover {
+        background: #3d3d3d;
+      }
+      .nav-tab.active {
+        background: #3d3d3d;
+      }
       pre {
         margin: 0;
       }
@@ -142,6 +164,18 @@
     <div id="app"></div>
 
     <div class="code-overlay">
+      <div class="nav-tabs">
+        <a
+          href="/"
+          class="nav-tab active"
+          >Three.js</a
+        >
+        <a
+          href="/webgl.html"
+          class="nav-tab"
+          >WebGL</a
+        >
+      </div>
       <pre>
 <span class="comment">// Threejs example</span>
 
@@ -156,8 +190,7 @@ container.appendChild( stats.dom );
     requestAnimationFrame( animate );
     renderer.render( scene, camera );
     stats.update();
-};
-      </pre>
+};</pre>
     </div>
 
     <div id="footer">

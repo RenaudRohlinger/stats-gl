@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0" />
+    <title>Stats-GL - WebGL Demo</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #000;
+      }
+      canvas {
+        width: 100vw;
+        height: 100vh;
+      }
+      .code-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        padding: 14px;
+        background-color: #1e1e1ef8;
+        color: #d4d4d4;
+        font-family: 'Courier New', Courier, monospace;
+      }
+      .nav-tabs {
+        display: flex;
+        gap: 1px;
+        margin-top: -14px;
+        position: absolute;
+        right: 0;
+        margin-bottom: 14px;
+      }
+      .nav-tab {
+        background: #1e1e1ef8;
+        color: #d4d4d4;
+        padding: 4px 8px;
+        text-decoration: none;
+        font-size: 12px;
+        transition: background-color 0.2s;
+      }
+      .nav-tab:hover {
+        background: #3d3d3d;
+      }
+      .nav-tab.active {
+        background: #3d3d3d;
+      }
+      pre {
+        margin: 0;
+      }
+      .keyword {
+        color: #569cd6;
+      }
+      .comment {
+        color: #6a9955;
+      }
+      .string {
+        color: #ce9178;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="glcanvas"></canvas>
+
+    <div class="code-overlay">
+      <div class="nav-tabs">
+        <a
+          href="/"
+          class="nav-tab"
+          >Three.js</a
+        >
+        <a
+          href="/webgl.html"
+          class="nav-tab active"
+          >WebGL</a
+        >
+      </div>
+      <pre>
+<span class="comment">// WebGL example</span>
+
+<span class="keyword">import</span> Stats <span class="keyword">from</span> <span class="string">'stats-gl'</span>
+
+<span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true });
+<span class="keyword">const</span> canvas = document.querySelector(<span class="string">'#glcanvas'</span>);
+stats.init(canvas);
+document.body.appendChild(stats.dom);
+
+<span class="keyword">function</span> animate() {
+    requestAnimationFrame(animate);
+    stats.begin();
+    render();
+    stats.end();
+
+    stats.update();
+}</pre>
+    </div>
+
+    <script type="module">
+      // import Stats from './lib/main.ts';
+      import Stats from './dist/main.js';
+
+      // Initialize stats
+      const stats = new Stats({ trackGPU: true });
+      const canvas = document.querySelector('#glcanvas');
+      stats.init(canvas);
+      document.body.appendChild(stats.dom);
+
+      // Initialize WebGL
+      const gl = canvas.getContext('webgl2');
+
+      // Create shader program
+      const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(
+        vertexShader,
+        `
+            attribute vec2 position;
+            uniform float rotation;
+            void main() {
+                float c = cos(rotation);
+                float s = sin(rotation);
+                mat2 rotationMatrix = mat2(c, -s, s, c);
+                vec2 rotatedPos = rotationMatrix * position;
+                gl_Position = vec4(rotatedPos, 0.0, 1.0);
+            }
+        `
+      );
+      gl.compileShader(vertexShader);
+
+      const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(
+        fragmentShader,
+        `
+            precision mediump float;
+            void main() {
+                gl_FragColor = vec4(1.0, 0.5, 0.2, 1.0);
+            }
+        `
+      );
+      gl.compileShader(fragmentShader);
+
+      const program = gl.createProgram();
+      gl.attachShader(program, vertexShader);
+      gl.attachShader(program, fragmentShader);
+      gl.linkProgram(program);
+
+      // Create triangle buffer
+      const triangleVertices = new Float32Array([
+        0.0, 0.5, -0.5, -0.5, 0.5, -0.5,
+      ]);
+
+      const vertexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, triangleVertices, gl.STATIC_DRAW);
+
+      // Get attribute and uniform locations
+      const positionLocation = gl.getAttribLocation(program, 'position');
+      const rotationLocation = gl.getUniformLocation(program, 'rotation');
+
+      // Animation variables
+      let rotation = 0;
+      let lastTime = 0;
+
+      function render(currentTime = 0) {
+        // Update rotation
+        const deltaTime = (currentTime - lastTime) * 0.001;
+        lastTime = currentTime;
+        rotation += deltaTime;
+
+        // Resize canvas to match display size
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight;
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+          gl.viewport(0, 0, width, height);
+        }
+
+        // Clear canvas
+        gl.clearColor(0.1, 0.1, 0.1, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // Start stats tracking
+        stats.begin();
+
+        // Draw triangle
+        gl.useProgram(program);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.enableVertexAttribArray(positionLocation);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+        gl.uniform1f(rotationLocation, rotation);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        // End stats tracking
+        stats.end();
+        stats.update();
+
+        requestAnimationFrame(render);
+      }
+
+      // Start animation
+      render();
+    </script>
+  </body>
+</html>
