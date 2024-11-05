@@ -8,13 +8,13 @@ importers:
 
   .:
     dependencies:
+      three:
+        specifier: '*'
+        version: 0.170.0
+    devDependencies:
       '@types/three':
         specifier: '*'
         version: 0.169.0
-      three:
-        specifier: ^0.170.0
-        version: 0.170.0
-    devDependencies:
       fs-extra:
         specifier: ^11.2.0
         version: 11.2.0
