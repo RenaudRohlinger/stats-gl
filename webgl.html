@@ -106,7 +106,7 @@ document.body.appendChild(stats.dom);
           import Stats from './dist/main.js';
 
           // Initialize stats
-          const stats = new Stats({ trackGPU: true });
+          const stats = new Stats({ trackGPU: true, trackHz: true });
           const canvas = document.querySelector('#glcanvas');
           stats.init(canvas);
           document.body.appendChild(stats.dom);
@@ -197,6 +197,9 @@ document.body.appendChild(stats.dom);
           let lastTime = 0;
 
           function render(currentTime = 0) {
+
+            const now = performance.now();
+            const workStartTime = now;
             // Update rotation
             const deltaTime = (currentTime - lastTime) * 0.001;
             lastTime = currentTime;
@@ -258,6 +261,8 @@ document.body.appendChild(stats.dom);
             // End stats tracking
             stats.end();
             stats.update();
+
+            // console.log('Frame time:', performance.now() - now);
 
             requestAnimationFrame(render);
           }

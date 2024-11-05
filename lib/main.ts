@@ -1,8 +1,10 @@
 import type * as THREE from 'three';
 import { Panel } from './panel';
+import { PanelVSync } from './panelVsync';
 
 interface StatsOptions {
   trackGPU?: boolean;
+  trackHz?: boolean;
   logsPerSecond?: number;
   graphsPerSecond?: number;
   samplesLog?: number;
@@ -22,6 +24,13 @@ interface AverageData {
   graph: number[];
 }
 
+
+interface VSyncInfo {
+  refreshRate: number;
+  frameTime: number;
+}
+
+
 interface InfoData {
   render: {
     timestamp: number;
@@ -37,6 +46,7 @@ class Stats {
   public horizontal: boolean;
   public minimal: boolean;
   public trackGPU: boolean;
+  public trackHz: boolean;
   public samplesLog: number;
   public samplesGraph: number;
   public precision: number;
@@ -65,6 +75,7 @@ class Stats {
   private msPanel: Panel;
   private gpuPanel: Panel | null = null;
   private gpuPanelCompute: Panel | null = null;
+  private vsyncPanel: PanelVSync | null = null;
 
   public averageFps: AverageData = { logs: [], graph: [] };
   public averageCpu: AverageData = { logs: [], graph: [] };
@@ -78,11 +89,28 @@ class Stats {
   private lastValue: { [key: string]: number } = {};
   private prevTextTime: number;
 
+  private readonly VSYNC_RATES: VSyncInfo[] = [
+    { refreshRate: 60, frameTime: 16.67 },
+    { refreshRate: 75, frameTime: 13.33 },
+    { refreshRate: 90, frameTime: 11.11 },
+    { refreshRate: 120, frameTime: 8.33 },
+    { refreshRate: 144, frameTime: 6.94 },
+    { refreshRate: 165, frameTime: 6.06 },
+    { refreshRate: 240, frameTime: 4.17 }
+  ];
+  private detectedVSync: VSyncInfo | null = null;
+  private frameTimeHistory: number[] = [];
+  private readonly HISTORY_SIZE = 120; // 2 seconds worth of frames at 60fps
+  private readonly VSYNC_THRESHOLD = 0.05; // 5% tolerance
+  private lastFrameTime: number = 0;
+
+
 
   static Panel = Panel;
 
   constructor({
     trackGPU = false,
+    trackHz = false,
     logsPerSecond = 4,
     graphsPerSecond = 30,
     samplesLog = 40,
@@ -96,6 +124,7 @@ class Stats {
     this.horizontal = horizontal;
     this.minimal = minimal;
     this.trackGPU = trackGPU;
+    this.trackHz = trackHz;
     this.samplesLog = samplesLog;
     this.samplesGraph = samplesGraph;
     this.precision = precision;
@@ -117,6 +146,12 @@ class Stats {
     // Create panels
     this.fpsPanel = this.addPanel(new Stats.Panel('FPS', '#0ff', '#002'), 0);
     this.msPanel = this.addPanel(new Stats.Panel('CPU', '#0f0', '#020'), 1);
+
+    if (this.trackHz === true) {
+      this.vsyncPanel = new PanelVSync('', '#f0f', '#202');
+      this.dom.appendChild(this.vsyncPanel.canvas);
+      this.vsyncPanel.setOffset(56, 35);
+    }
 
     this.setupEventListeners();
   }
@@ -370,6 +405,58 @@ class Stats {
     });
 
   }
+  private detectVSync(currentTime: number): void {
+    if (this.lastFrameTime === 0) {
+      this.lastFrameTime = currentTime;
+      return;
+    }
+
+    // Calculate frame time
+    const frameTime = currentTime - this.lastFrameTime;
+    this.lastFrameTime = currentTime;
+
+    // Add to histories
+    this.frameTimeHistory.push(frameTime);
+    if (this.frameTimeHistory.length > this.HISTORY_SIZE) {
+      this.frameTimeHistory.shift();
+    }
+
+    // Only start detection when we have enough samples
+    if (this.frameTimeHistory.length < 60) return;
+
+    // Calculate average frame time
+    const avgFrameTime = this.frameTimeHistory.reduce((a, b) => a + b) / this.frameTimeHistory.length;
+
+    // Calculate frame time stability (standard deviation)
+    const variance = this.frameTimeHistory.reduce((acc, time) =>
+      acc + Math.pow(time - avgFrameTime, 2), 0) / this.frameTimeHistory.length;
+    const stability = Math.sqrt(variance);
+
+    // Only proceed if frame timing is relatively stable
+    if (stability > 2) { // 2ms stability threshold
+      this.detectedVSync = null;
+      return;
+    }
+
+    // Find the closest VSync rate based on frame time
+    let closestMatch: VSyncInfo | null = null;
+    let smallestDiff = Infinity;
+
+    for (const rate of this.VSYNC_RATES) {
+      const diff = Math.abs(avgFrameTime - rate.frameTime);
+      if (diff < smallestDiff) {
+        smallestDiff = diff;
+        closestMatch = rate;
+      }
+    }
+
+    if (closestMatch && (smallestDiff / closestMatch.frameTime <= this.VSYNC_THRESHOLD)) {
+      this.detectedVSync = closestMatch;
+    } else {
+      this.detectedVSync = null;
+    }
+
+  }
 
   endInternal() {
     const currentTime = performance.now();
@@ -403,6 +490,16 @@ class Stats {
     }
     if (shouldUpdateGraph) {
       this.prevGraphTime = currentTime;
+    }
+
+    if (this.vsyncPanel !== null) {
+      this.detectVSync(currentTime);
+
+      const vsyncValue = this.detectedVSync?.refreshRate || 0;
+
+      if (shouldUpdateText && vsyncValue > 0) {
+        this.vsyncPanel.update(vsyncValue, vsyncValue);
+      }
     }
 
     return currentTime;

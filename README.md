@@ -35,8 +35,10 @@ import Stats from "stats-gl";
 // create a new Stats object
 const stats = new Stats({
     trackGPU: false,
-    logsPerSecond: 20,
-    samplesLog: 100, 
+    trackHz: false,
+    logsPerSecond: 4,
+    graphsPerSecond: 30,
+    samplesLog: 40, 
     samplesGraph: 10, 
     precision: 2, 
     horizontal: true,
@@ -120,6 +122,9 @@ import { StatsGl } from '@tresjs/cientos'
 The constructor for the Stats class accepts an options object with the following properties:
 
 - `logsPerSecond`: How often to log performance data, in logs per second.
+- `graphsPerSecond`: How often to update the graph, in graphs per second.
+- `trackGPU`: A boolean value to enable or disable GPU tracking.
+- `trackHz`: A boolean value to enable or disable Hz tracking.
 - `samplesLog`: Number of recent log samples to keep for computing averages.
 - `samplesGraph`: Number of recent graph samples to keep for computing averages.
 - `precision`: Precision of the data, in number of decimal places (only affects CPU and GPU).

@@ -81,7 +81,7 @@ class Panel {
         return gradient;
     }
 
-    private initializeCanvas() {
+    public initializeCanvas() {
         if (!this.context) return;
 
         this.context.imageSmoothingEnabled = false;
@@ -104,7 +104,7 @@ class Panel {
     }
 
     // Update only text portion
-    update(value: number, maxValue: number, decimals: number = 0) {
+    public update(value: number, maxValue: number, decimals: number = 0) {
         if (!this.context || !this.gradient) return;
 
         const min = Math.min(Infinity, value);
@@ -125,7 +125,7 @@ class Panel {
     }
 
     // Update only graph portion
-    updateGraph(valueGraph: number, maxGraph: number) {
+    public updateGraph(valueGraph: number, maxGraph: number) {
         if (!this.context || !this.gradient) return;
 
         // Handle zero values appropriately
