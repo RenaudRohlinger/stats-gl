@@ -11,6 +11,8 @@
         margin: 0;
         overflow: hidden;
         background: #000;
+        font-family: system-ui, -apple-system, sans-serif;
+
       }
       canvas {
         width: 100vw;
@@ -37,6 +39,7 @@
         position: absolute;
         right: 0;
         margin-bottom: 14px;
+        font-family: system-ui, -apple-system, sans-serif;
       }
       .nav-tab {
         background: #1e1e1ef8;
@@ -63,6 +66,38 @@
       }
       .string {
         color: #ce9178;
+      }
+      ::selection {
+        background: #264f78;
+      }
+
+      #footer {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        color: #fff;
+        font-size: 14px;
+        padding: 14px;
+        text-align: right;
+        background-color: #1e1e1ef8;
+      }
+      #footer a {
+        color: #fff;
+        font-weight: bold;
+        text-decoration: none;
+      }
+
+      /* style the Twitter SVG in the same way as GitHub */
+      #twitter {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+      }
+      #footer svg {
+        fill: #fff;
+        width: 14px;
+        height: 14px;
+        border: 0;
       }
     </style>
   </head>
@@ -102,8 +137,24 @@ document.body.appendChild(stats.dom);
 }</pre>
     </div>
 
+    <div id="footer">
+      Made with love ❤️ by
+      <a
+        href="https://twitter.com/onirenaud"
+        target="_blank"
+        >@onirenaud</a
+      >
+      -
+      <a
+        href="https://twitter.com/utsuboco"
+        target="_blank"
+        >@utsuboco</a
+      >
+    </div>
+
         <script type="module">
-          import Stats from './dist/main.js';
+          // import Stats from './dist/main.js';
+          import Stats from './lib/main.ts';
 
           // Initialize stats
           const stats = new Stats({ trackGPU: true, trackHz: true });
@@ -260,6 +311,7 @@ document.body.appendChild(stats.dom);
 
             // End stats tracking
             stats.end();
+
             stats.update();
 
             // console.log('Frame time:', performance.now() - now);

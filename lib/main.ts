@@ -67,7 +67,6 @@ class Stats {
   private frameTimes: number[] = [];  // Store frame timestamps
 
   private renderCount = 0;
-  private isRunningCPUProfiling = false;
 
   private totalCpuDuration = 0;
   private totalGpuDuration = 0;
@@ -238,6 +237,7 @@ class Stats {
         }
       }
       this.info = renderer.info;
+      this.patchThreeWebGPU(renderer);
       return true;
     }
     return false;
@@ -285,9 +285,7 @@ class Stats {
   }
 
   public begin(): void {
-    if (!this.isRunningCPUProfiling) {
-      this.beginProfiling('cpu-started');
-    }
+    this.beginProfiling('cpu-started');
 
     if (!this.gl || !this.ext) return;
 
@@ -308,15 +306,14 @@ class Stats {
       this.gpuQueries.push({ query: this.activeQuery });
       this.activeQuery = null;
     }
+
+    this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
   }
 
   public update(): void {
-    // Always end the current CPU profiling if it's running
-    if (this.isRunningCPUProfiling) {
-      this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
-      // Add to averages immediately after getting the duration
-      // this.addToAverage(this.totalCpuDuration, this.averageCpu);
-    }
+
+
+    this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
 
     if (!this.info) {
       this.processGpuQueries();
@@ -336,7 +333,6 @@ class Stats {
   private resetCounters(): void {
     this.renderCount = 0;
     this.totalCpuDuration = 0;
-    this.beginProfiling('cpu-started');
     this.beginTime = this.endInternal();
   }
 
@@ -567,7 +563,6 @@ class Stats {
     if (window.performance) {
 
       window.performance.mark(marker);
-      this.isRunningCPUProfiling = true
 
     }
 
@@ -575,12 +570,11 @@ class Stats {
 
   endProfiling(startMarker: string | PerformanceMeasureOptions | undefined, endMarker: string | undefined, measureName: string) {
 
-    if (window.performance && endMarker && this.isRunningCPUProfiling) {
+    if (window.performance && endMarker) {
 
       window.performance.mark(endMarker);
       const cpuMeasure = performance.measure(measureName, startMarker, endMarker);
       this.totalCpuDuration += cpuMeasure.duration;
-      this.isRunningCPUProfiling = false
 
     }
 
@@ -644,6 +638,7 @@ class Stats {
   }
 
   private updateAverages(): void {
+
     this.addToAverage(this.totalCpuDuration, this.averageCpu);
     this.addToAverage(this.totalGpuDuration, this.averageGpu);
     // Add GPU Compute to the main update flow
@@ -654,7 +649,7 @@ class Stats {
 
   addToAverage(value: number, averageArray: { logs: any; graph: any; }) {
     // Validate value
-    // if (value === undefined || value === null || isNaN(value)) {
+    // if (value === undefined || value === null || isNaN(value) || value === 0) {
     //   return;
     // }
 
@@ -677,6 +672,22 @@ class Stats {
 
   }
 
+  patchThreeWebGPU(renderer: any) {
+
+    const originalAnimationLoop = renderer.info.reset
+
+    const statsInstance = this;
+
+    renderer.info.reset = function () {
+
+      statsInstance.beginProfiling('cpu-started');
+
+      originalAnimationLoop.call(this);
+
+    }
+
+  }
+
   patchThreeRenderer(renderer: any) {
 
     // Store the original render method
@@ -688,13 +699,13 @@ class Stats {
     // Override the render method on the prototype
     renderer.render = function (scene: THREE.Scene, camera: THREE.Camera) {
 
-
       statsInstance.begin(); // Start tracking for this render call
 
       // Call the original render method
       originalRenderMethod.call(this, scene, camera);
 
       statsInstance.end(); // End tracking for this render call
+
     };
 
 

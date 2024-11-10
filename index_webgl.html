@@ -212,8 +212,7 @@ container.appendChild( stats.dom );
     <script type="importmap">
       {
         "imports": {
-          "three": "https://unpkg.com/three@0.170.0/build/three.webgpu.js",
-          "three/tsl": "https://unpkg.com/three@0.170.0/build/three.webgpu.js"
+          "three": "https://unpkg.com/three@0.170.0/build/three.module.js"
         }
       }
     </script>
@@ -226,30 +225,6 @@ container.appendChild( stats.dom );
       import { OrbitControls } from 'https://unpkg.com/three@0.170.0/examples/jsm/controls/OrbitControls.js';
 
       import { GLTFLoader } from 'https://unpkg.com/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
-      import {
-        storage,
-        instanceIndex,
-        If,
-        vec3,
-        uv,
-        uint,
-        float,
-        Fn,
-      } from 'three/tsl';
-
-      const size = 32;
-      const array = new Array(size).fill(0);
-
-      const arrayBuffer = new THREE.StorageInstancedBufferAttribute(
-        new Float32Array(array),
-        3
-      );
-
-      const compute = Fn(() => {
-        storage(arrayBuffer, 'vec3', size)
-          .element(instanceIndex)
-          .assign(instanceIndex);
-      })().compute(size);
 
       let mixer;
 
@@ -263,7 +238,7 @@ container.appendChild( stats.dom );
       });
       container.appendChild(stats.dom);
 
-      const renderer = new THREE.WebGPURenderer({
+      const renderer = new THREE.WebGLRenderer({
         antialias: true,
       });
       renderer.setPixelRatio(window.devicePixelRatio);
@@ -326,8 +301,7 @@ container.appendChild( stats.dom );
 
         controls.update();
 
-        await renderer.renderAsync(scene, camera);
-        await renderer.computeAsync(compute);
+        renderer.render(scene, camera);
         stats.update();
       }
     </script>
