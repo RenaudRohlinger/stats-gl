@@ -4,6 +4,7 @@ import { PanelVSync } from './panelVsync';
 
 interface StatsOptions {
   trackGPU?: boolean;
+  trackCPT?: boolean;
   trackHz?: boolean;
   logsPerSecond?: number;
   graphsPerSecond?: number;
@@ -47,6 +48,7 @@ class Stats {
   public minimal: boolean;
   public trackGPU: boolean;
   public trackHz: boolean;
+  public trackCPT: boolean;
   public samplesLog: number;
   public samplesGraph: number;
   public precision: number;
@@ -71,6 +73,7 @@ class Stats {
   private totalGpuDuration = 0;
   private totalGpuDurationCompute = 0;
 
+  private _panelId: number;
   private fpsPanel: Panel;
   private msPanel: Panel;
   private gpuPanel: Panel | null = null;
@@ -110,6 +113,7 @@ class Stats {
 
   constructor({
     trackGPU = false,
+    trackCPT = false,
     trackHz = false,
     logsPerSecond = 4,
     graphsPerSecond = 30,
@@ -124,6 +128,7 @@ class Stats {
     this.horizontal = horizontal;
     this.minimal = minimal;
     this.trackGPU = trackGPU;
+    this.trackCPT = trackCPT;
     this.trackHz = trackHz;
     this.samplesLog = samplesLog;
     this.samplesGraph = samplesGraph;
@@ -143,9 +148,10 @@ class Stats {
 
     this.prevCpuTime = this.beginTime;
 
+    this._panelId = 0
     // Create panels
-    this.fpsPanel = this.addPanel(new Stats.Panel('FPS', '#0ff', '#002'), 0);
-    this.msPanel = this.addPanel(new Stats.Panel('CPU', '#0f0', '#020'), 1);
+    this.fpsPanel = this.addPanel(new Stats.Panel('FPS', '#0ff', '#002'));
+    this.msPanel = this.addPanel(new Stats.Panel('CPU', '#0f0', '#020'));
 
     if (this.trackHz === true) {
       this.vsyncPanel = new PanelVSync('', '#f0f', '#202');
@@ -183,10 +189,10 @@ class Stats {
   };
 
   private handleResize = (): void => {
-    this.resizePanel(this.fpsPanel, 0);
-    this.resizePanel(this.msPanel, 1);
-    if (this.gpuPanel) this.resizePanel(this.gpuPanel, 2);
-    if (this.gpuPanelCompute) this.resizePanel(this.gpuPanelCompute, 3);
+    this.resizePanel(this.fpsPanel);
+    this.resizePanel(this.msPanel);
+    if (this.gpuPanel) this.resizePanel(this.gpuPanel);
+    if (this.gpuPanelCompute) this.resizePanel(this.gpuPanelCompute);
   };
 
   public async init(
@@ -225,7 +231,7 @@ class Stats {
 
   private async handleWebGPURenderer(renderer: any): Promise<boolean> {
     if (renderer.isWebGPURenderer) {
-      if (this.trackGPU) {
+      if (this.trackGPU || this.trackCPT) {
         renderer.backend.trackTimestamp = true;
         if (await renderer.hasFeatureAsync('timestamp-query')) {
           this.initializeWebGPUPanels();
@@ -238,11 +244,12 @@ class Stats {
   }
 
   private initializeWebGPUPanels(): void {
-    this.gpuPanel = this.addPanel(new Stats.Panel('GPU', '#ff0', '#220'), 2);
-    this.gpuPanelCompute = this.addPanel(
-      new Stats.Panel('CPT', '#e1e1e1', '#212121'),
-      3
-    );
+    if (this.trackGPU) {
+      this.gpuPanel = this.addPanel(new Stats.Panel('GPU', '#ff0', '#220'));
+    }
+    if (this.trackCPT) {
+      this.gpuPanelCompute = this.addPanel(new Stats.Panel('CPT', '#e1e1e1', '#212121'));
+    }
   }
 
   private initializeWebGL(
@@ -272,7 +279,7 @@ class Stats {
     if (this.gl) {
       this.ext = this.gl.getExtension('EXT_disjoint_timer_query_webgl2');
       if (this.ext) {
-        this.gpuPanel = this.addPanel(new Stats.Panel('GPU', '#ff0', '#220'), 2);
+        this.gpuPanel = this.addPanel(new Stats.Panel('GPU', '#ff0', '#220'));
       }
     }
   }
@@ -333,7 +340,7 @@ class Stats {
     this.beginTime = this.endInternal();
   }
 
-  resizePanel(panel: Panel, offset: number) {
+  resizePanel(panel: Panel) {
 
     panel.canvas.style.position = 'absolute';
 
@@ -346,23 +353,24 @@ class Stats {
       panel.canvas.style.display = 'block';
       if (this.horizontal) {
         panel.canvas.style.top = '0px';
-        panel.canvas.style.left = offset * panel.WIDTH / panel.PR + 'px';
+        panel.canvas.style.left = panel.id * panel.WIDTH / panel.PR + 'px';
       } else {
         panel.canvas.style.left = '0px';
-        panel.canvas.style.top = offset * panel.HEIGHT / panel.PR + 'px';
+        panel.canvas.style.top = panel.id * panel.HEIGHT / panel.PR + 'px';
 
       }
     }
 
   }
-  addPanel(panel: Panel, offset: number) {
+  addPanel(panel: Panel) {
 
     if (panel.canvas) {
 
       this.dom.appendChild(panel.canvas);
+      panel.id = this._panelId;
+      this.resizePanel(panel);
 
-      this.resizePanel(panel, offset);
-
+      this._panelId++;
     }
 
     return panel;
@@ -481,7 +489,7 @@ class Stats {
     if (this.gpuPanel) {
       this.updatePanelComponents(this.gpuPanel, this.averageGpu, this.precision, shouldUpdateText, shouldUpdateGraph);
     }
-    if (this.gpuPanelCompute) {
+    if (this.trackCPT && this.gpuPanelCompute) {
       this.updatePanelComponents(this.gpuPanelCompute, this.averageGpuCompute, this.precision, shouldUpdateText, shouldUpdateGraph);
     }
 

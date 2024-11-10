@@ -5,6 +5,7 @@ class Panel {
     fg: string;
     bg: string;
     gradient: CanvasGradient | null;
+    id: number = 0;
     PR: number;
     WIDTH: number;
     HEIGHT: number;
