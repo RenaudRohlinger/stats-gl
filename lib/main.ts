@@ -558,26 +558,46 @@ class Stats {
     }
   }
 
-  beginProfiling(marker: string) {
-
+  private beginProfiling(marker: string): void {
     if (window.performance) {
-
-      window.performance.mark(marker);
-
+      try {
+        window.performance.clearMarks(marker);
+        window.performance.mark(marker);
+      } catch (error) {
+        console.debug('Stats: Performance marking failed:', error);
+      }
     }
-
   }
 
-  endProfiling(startMarker: string | PerformanceMeasureOptions | undefined, endMarker: string | undefined, measureName: string) {
+  private endProfiling(startMarker: string | PerformanceMeasureOptions | undefined, endMarker: string | undefined, measureName: string): void {
+    if (!window.performance || !endMarker || !startMarker) return;
 
-    if (window.performance && endMarker) {
+    try {
+      // First check if the start mark exists
+      const entries = window.performance.getEntriesByName(startMarker as string, 'mark');
+      if (entries.length === 0) {
+        // If start mark doesn't exist, create it now with the same timestamp as end
+        this.beginProfiling(startMarker as string);
+      }
 
+      // Create the end mark
+      window.performance.clearMarks(endMarker);
       window.performance.mark(endMarker);
+
+      // Clear any existing measure with the same name
+      window.performance.clearMeasures(measureName);
+
+      // Create the measurement
       const cpuMeasure = performance.measure(measureName, startMarker, endMarker);
       this.totalCpuDuration += cpuMeasure.duration;
 
+      // Clean up
+      window.performance.clearMarks(startMarker as string);
+      window.performance.clearMarks(endMarker);
+      window.performance.clearMeasures(measureName);
+    } catch (error) {
+      console.debug('Stats: Performance measurement failed:', error);
     }
-
   }
 
   updatePanel(panel: { update: any; updateGraph: any; name: string; } | null, averageArray: { logs: number[], graph: number[] }, precision = 2) {
