@@ -38,7 +38,7 @@ class Panel {
         this.canvas.style.width = '90px';
         this.canvas.style.height = '48px';
         this.canvas.style.position = 'absolute';
-        this.canvas.style.cssText = 'width:90px;height:48px';
+        this.canvas.style.cssText = 'width:90px;height:48px;background-color: transparent !important;';
 
         this.context = this.canvas.getContext('2d');
 

@@ -10,20 +10,23 @@ class PanelVSync extends Panel {
         // Redefine dimensions for a smaller panel
         this.SMALL_HEIGHT = 9 * this.PR; // Smaller height
         this.HEIGHT = this.SMALL_HEIGHT;
+        this.WIDTH = 35 * this.PR; // Smaller width
         this.TEXT_Y = 0 * this.PR; // Adjust text position
 
         // Resize the canvas
         this.canvas.height = this.HEIGHT;
+        this.canvas.width = this.WIDTH;
         this.canvas.style.height = '9px'; // Match the new height
-
+        this.canvas.style.width = '35px'; // Match the new width
         // Style for overlay positioning
         this.canvas.style.cssText = `
-            width: 90px;
+            width: 35px;
             height: 9px;
             position: absolute;
             top: 0;
             left: 0;
-            pointer-events: none; // Allow clicks to pass through
+            background-color: transparent !important;
+            pointer-events: none;
         `;
 
         // Reinitialize with new dimensions
@@ -38,7 +41,6 @@ class PanelVSync extends Panel {
         // Larger font for better visibility
         this.context.font = 'bold ' + (9 * this.PR) + 'px Helvetica,Arial,sans-serif';
         this.context.textBaseline = 'top';
-
         this.context.globalAlpha = 1;
     }
 
