@@ -132,7 +132,7 @@ const _Stats = class _Stats2 {
     }
     if (canvasOrGL.isWebGPURenderer) {
       canvasOrGL.backend.trackTimestamp = true;
-      if (await canvasOrGL.hasFeatureAsync('timestamp-query')) {
+      if (canvasOrGL.hasFeature('timestamp-query')) {
         this.gpuPanel = this.addPanel(
           new _Stats2.Panel('GPU', '#ff0', '#220'),
           2

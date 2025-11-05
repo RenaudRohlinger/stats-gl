@@ -232,7 +232,7 @@ class Stats {
     if (renderer.isWebGPURenderer) {
       if (this.trackGPU || this.trackCPT) {
         renderer.backend.trackTimestamp = true;
-        if (await renderer.hasFeatureAsync('timestamp-query')) {
+        if (renderer.hasFeature('timestamp-query')) {
           this.initializeWebGPUPanels();
         }
       }
