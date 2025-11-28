@@ -34,6 +34,7 @@ import Stats from "stats-gl";
 
 // create a new Stats object
 const stats = new Stats({
+    trackFPS: true, // show built-in FPS/CPU panels (default)
     trackGPU: false,
     trackHz: false,
     trackCPT: false,
@@ -124,6 +125,7 @@ The constructor for the Stats class accepts an options object with the following
 
 - `logsPerSecond`: How often to log performance data, in logs per second.
 - `graphsPerSecond`: How often to update the graph, in graphs per second.
+- `trackFPS`: A boolean value to enable or disable the built-in FPS and CPU panels. Defaults to `true`. Set to `false` if you only want custom panels and/or GPU/Hz/CPT panels.
 - `trackGPU`: A boolean value to enable or disable GPU tracking.
 - `trackHz`: A boolean value to enable or disable Hz tracking.
 - `trackCPT`: (Threejs specific) A boolean value to enable or disable Threejs Compute Shading tracking.

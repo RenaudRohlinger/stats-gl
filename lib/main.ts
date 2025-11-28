@@ -6,6 +6,7 @@ interface StatsOptions {
   trackGPU?: boolean;
   trackCPT?: boolean;
   trackHz?: boolean;
+  trackFPS?: boolean;
   logsPerSecond?: number;
   graphsPerSecond?: number;
   samplesLog?: number;
@@ -48,6 +49,7 @@ class Stats {
   public minimal: boolean;
   public trackGPU: boolean;
   public trackHz: boolean;
+  public trackFPS: boolean;
   public trackCPT: boolean;
   public samplesLog: number;
   public samplesGraph: number;
@@ -73,8 +75,8 @@ class Stats {
   private totalGpuDurationCompute = 0;
 
   private _panelId: number;
-  private fpsPanel: Panel;
-  private msPanel: Panel;
+  private fpsPanel: Panel | null = null;
+  private msPanel: Panel | null = null;
   private gpuPanel: Panel | null = null;
   private gpuPanelCompute: Panel | null = null;
   private vsyncPanel: PanelVSync | null = null;
@@ -114,6 +116,7 @@ class Stats {
     trackGPU = false,
     trackCPT = false,
     trackHz = false,
+    trackFPS = true,
     logsPerSecond = 4,
     graphsPerSecond = 30,
     samplesLog = 40,
@@ -129,6 +132,7 @@ class Stats {
     this.trackGPU = trackGPU;
     this.trackCPT = trackCPT;
     this.trackHz = trackHz;
+    this.trackFPS = trackFPS;
     this.samplesLog = samplesLog;
     this.samplesGraph = samplesGraph;
     this.precision = precision;
@@ -149,8 +153,10 @@ class Stats {
 
     this._panelId = 0
     // Create panels
-    this.fpsPanel = this.addPanel(new Stats.Panel('FPS', '#0ff', '#002'));
-    this.msPanel = this.addPanel(new Stats.Panel('CPU', '#0f0', '#020'));
+    if (this.trackFPS) {
+      this.fpsPanel = this.addPanel(new Stats.Panel('FPS', '#0ff', '#002'));
+      this.msPanel = this.addPanel(new Stats.Panel('CPU', '#0f0', '#020'));
+    }
 
     if (this.trackHz === true) {
       this.vsyncPanel = new PanelVSync('', '#f0f', '#202');
@@ -188,8 +194,8 @@ class Stats {
   };
 
   private handleResize = (): void => {
-    this.resizePanel(this.fpsPanel);
-    this.resizePanel(this.msPanel);
+    if (this.fpsPanel) this.resizePanel(this.fpsPanel);
+    if (this.msPanel) this.resizePanel(this.msPanel);
     if (this.gpuPanel) this.resizePanel(this.gpuPanel);
     if (this.gpuPanelCompute) this.resizePanel(this.gpuPanelCompute);
   };
