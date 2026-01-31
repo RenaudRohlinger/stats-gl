@@ -205,6 +205,43 @@ worker.onmessage = (e) => {
 };
 ```
 
+## 8. TSL Node Capture (WebGPU)
+
+Capture TSL nodes for live preview. Works with MRT and PostProcessing.
+
+### Main Thread
+
+```js
+import { statsGL } from 'stats-gl/addons/StatsGLNode.js';
+import { addMethodChaining } from 'three/tsl';
+
+addMethodChaining('toStatsGL', statsGL);
+
+// Register nodes - panels created automatically
+diffuseNode.toStatsGL('Diffuse', stats);
+normalNode.toStatsGL('Normal', stats);
+depthNode.toStatsGL('Depth', stats, (n) => linearize(n)); // with transform
+```
+
+### Worker
+
+```js
+import { statsGLWorker, flushCaptures } from 'stats-gl/addons/StatsGLNodeWorker.js';
+import { addMethodChaining } from 'three/tsl';
+
+addMethodChaining('toStatsGL', statsGLWorker);
+
+// Register (no stats instance in worker)
+diffuseNode.toStatsGL('Diffuse');
+normalNode.toStatsGL('Normal');
+
+// After render, flush and transfer
+const captures = await flushCaptures(renderer);
+for (const { name, bitmap } of captures) {
+  self.postMessage({ type: 'texture', name, bitmap }, [bitmap]);
+}
+```
+
 ## Options
 
 | Option | Default | Description |
@@ -263,4 +300,8 @@ import Stats, {
   TextureCaptureWebGPU,
   StatsGLCapture
 } from 'stats-gl';
+
+// TSL Node addons (WebGPU only)
+import { statsGL } from 'stats-gl/addons/StatsGLNode.js';
+import { statsGLWorker, flushCaptures } from 'stats-gl/addons/StatsGLNodeWorker.js';
 ```
