@@ -259,7 +259,7 @@ worker.onmessage = (e) => {
 
       // Create worker
       const worker = new Worker(
-        new URL('./demo/texture_worker.js', import.meta.url),
+        new URL('./demo/worker.js', import.meta.url),
         { type: 'module' }
       );
 
