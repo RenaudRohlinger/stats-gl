@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0" />
+    <title>Stats-GL - WebGL Demo</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #000;
+        font-family: system-ui, -apple-system, sans-serif;
+
+      }
+      canvas {
+        width: 100vw;
+        height: 100vh;
+      }
+      .code-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        padding: 14px;
+        background-color: #1e1e1ef8;
+        color: #d4d4d4;
+        overflow: auto;
+        margin: 0;
+        font-family: 'Courier New', Courier, monospace;
+        @media screen and (max-width: 608px) {
+          display: none;
+        }
+      }
+      .nav-tabs {
+        display: flex;
+        gap: 1px;
+        margin-top: -14px;
+        position: absolute;
+        right: 0;
+        margin-bottom: 14px;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      .nav-tab {
+        background: #1e1e1ef8;
+        color: #d4d4d4;
+        padding: 4px 8px;
+        text-decoration: none;
+        font-size: 12px;
+        transition: background-color 0.2s;
+      }
+      .nav-tab:hover {
+        background: #3d3d3d;
+      }
+      .nav-tab.active {
+        background: #3d3d3d;
+      }
+      pre {
+        margin: 0;
+      }
+      .keyword {
+        color: #569cd6;
+      }
+      .comment {
+        color: #6a9955;
+      }
+      .string {
+        color: #ce9178;
+      }
+      ::selection {
+        background: #264f78;
+      }
+
+      #footer {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        color: #fff;
+        font-size: 14px;
+        padding: 14px;
+        text-align: right;
+        background-color: #1e1e1ef8;
+      }
+      #footer a {
+        color: #fff;
+        font-weight: bold;
+        text-decoration: none;
+      }
+
+      /* style the Twitter SVG in the same way as GitHub */
+      #twitter {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+      }
+      #footer svg {
+        fill: #fff;
+        width: 14px;
+        height: 14px;
+        border: 0;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/webgl-2b298292.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/main-a231d0d0.js">
+  </head>
+  <body>
+    <canvas id="glcanvas"></canvas>
+
+    <div class="code-overlay">
+      <div class="nav-tabs">
+        <a href="/" class="nav-tab">Three.js</a>
+        <a href="/webgl.html" class="nav-tab active">WebGL</a>
+        <a href="/webgpu.html" class="nav-tab">WebGPU</a>
+        <a href="/worker.html" class="nav-tab">Worker</a>
+        <a href="/worker_tsl.html" class="nav-tab">Worker TSL</a>
+      </div>
+      <pre>
+<span class="comment">// WebGL example with texture panels</span>
+
+<span class="keyword">import</span> Stats <span class="keyword">from</span> <span class="string">'stats-gl'</span>
+
+<span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true });
+stats.init(canvas);
+
+<span class="comment">// Create texture preview panels</span>
+stats.addTexturePanel(<span class="string">'Color'</span>);
+stats.addTexturePanel(<span class="string">'Luma'</span>);
+stats.setTextureWebGL(<span class="string">'Color'</span>, colorFbo, 256, 256);
+stats.setTextureWebGL(<span class="string">'Luma'</span>, lumaFbo, 256, 256);
+
+<span class="keyword">function</span> animate() {
+    stats.begin();
+    renderPlasmaToFBO();
+    renderLuminancePass();
+    blitToScreen();
+    stats.end();
+    stats.update();
+}</pre>
+    </div>
+
+    <div id="footer">
+      Made with love ❤️ by
+      <a
+        href="https://twitter.com/onirenaud"
+        target="_blank"
+        >@onirenaud</a
+      >
+      -
+      <a
+        href="https://twitter.com/utsuboco"
+        target="_blank"
+        >@utsuboco</a
+      >
+    </div>
+
+        
+      </body>
+    </html>
+  </body>
+</html>

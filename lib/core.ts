@@ -298,7 +298,7 @@ export class StatsCore {
       const writeBuffer = this.gpuReadBuffers[this.gpuWriteBufferIndex];
 
       // Only add resolve commands if the target buffer is unmapped
-      if (writeBuffer.mapState === 'unmapped') {
+      if ((writeBuffer as any).mapState === 'unmapped') {
         encoder.resolveQuerySet(this.gpuQuerySet, 0, 2, this.gpuResolveBuffer, 0);
         encoder.copyBufferToBuffer(this.gpuResolveBuffer, 0, writeBuffer, 0, 16);
       }
@@ -344,7 +344,7 @@ export class StatsCore {
     }
 
     // Only attempt to map if buffer is unmapped
-    if (readBuffer.mapState !== 'unmapped') {
+    if ((readBuffer as any).mapState !== 'unmapped') {
       return this.totalGpuDuration;
     }
 
@@ -547,7 +547,7 @@ export class StatsCore {
       this.gpuResolveBuffer = null;
     }
     for (const buffer of this.gpuReadBuffers) {
-      if (buffer.mapState === 'mapped') {
+      if ((buffer as any).mapState === 'mapped') {
         buffer.unmap();
       }
       buffer.destroy();

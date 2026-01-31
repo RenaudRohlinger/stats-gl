@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0" />
+    <title>Stats-GL - WebGPU Demo</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #000;
+        font-family: system-ui, -apple-system, sans-serif;
+
+      }
+      canvas {
+        width: 100vw;
+        height: 100vh;
+      }
+      .code-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        padding: 14px;
+        background-color: #1e1e1ef8;
+        color: #d4d4d4;
+        overflow: auto;
+        margin: 0;
+        font-family: 'Courier New', Courier, monospace;
+        @media screen and (max-width: 608px) {
+          display: none;
+        }
+      }
+      .nav-tabs {
+        display: flex;
+        gap: 1px;
+        margin-top: -14px;
+        position: absolute;
+        right: 0;
+        margin-bottom: 14px;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      .nav-tab {
+        background: #1e1e1ef8;
+        color: #d4d4d4;
+        padding: 4px 8px;
+        text-decoration: none;
+        font-size: 12px;
+        transition: background-color 0.2s;
+      }
+      .nav-tab:hover {
+        background: #3d3d3d;
+      }
+      .nav-tab.active {
+        background: #3d3d3d;
+      }
+      pre {
+        margin: 0;
+      }
+      .keyword {
+        color: #569cd6;
+      }
+      .comment {
+        color: #6a9955;
+      }
+      .string {
+        color: #ce9178;
+      }
+      ::selection {
+        background: #264f78;
+      }
+
+      #footer {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        color: #fff;
+        font-size: 14px;
+        padding: 14px;
+        text-align: right;
+        background-color: #1e1e1ef8;
+      }
+      #footer a {
+        color: #fff;
+        font-weight: bold;
+        text-decoration: none;
+      }
+
+      #twitter {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+      }
+      #footer svg {
+        fill: #fff;
+        width: 14px;
+        height: 14px;
+        border: 0;
+      }
+
+      .error-message {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #ff6b6b;
+        font-size: 18px;
+        text-align: center;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 8px;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/webgpu-54925d9a.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/main-a231d0d0.js">
+  </head>
+  <body>
+    <canvas id="gpucanvas"></canvas>
+
+    <div class="code-overlay">
+      <div class="nav-tabs">
+        <a href="/" class="nav-tab">Three.js</a>
+        <a href="/webgl.html" class="nav-tab">WebGL</a>
+        <a href="/webgpu.html" class="nav-tab active">WebGPU</a>
+        <a href="/worker.html" class="nav-tab">Worker</a>
+        <a href="/worker_tsl.html" class="nav-tab">Worker TSL</a>
+      </div>
+      <pre>
+<span class="comment">// Native WebGPU example</span>
+
+<span class="keyword">import</span> Stats <span class="keyword">from</span> <span class="string">'stats-gl'</span>
+
+<span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true });
+<span class="keyword">await</span> stats.init(device);
+document.body.appendChild(stats.dom);
+
+<span class="keyword">function</span> render() {
+    <span class="keyword">const</span> encoder = device.createCommandEncoder();
+    stats.begin();
+
+    <span class="keyword">const</span> pass = encoder.beginRenderPass({
+        colorAttachments: [...],
+        timestampWrites: stats.getTimestampWrites()
+    });
+    <span class="comment">// draw calls</span>
+    pass.end();
+
+    stats.end(encoder);
+    device.queue.submit([encoder.finish()]);
+    stats.update();
+    requestAnimationFrame(render);
+}</pre>
+    </div>
+
+    <div id="footer">
+      Made with love &#10084;&#65039; by
+      <a
+        href="https://twitter.com/onirenaud"
+        target="_blank"
+        >@onirenaud</a
+      >
+      -
+      <a
+        href="https://twitter.com/utsuboco"
+        target="_blank"
+        >@utsuboco</a
+      >
+    </div>
+
+    
+  </body>
+</html>
