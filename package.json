@@ -1,6 +1,6 @@
 {
   "name": "stats-gl",
-  "version": "3.8.0",
+  "version": "4.0.0",
   "type": "module",
   "author": "Renaud ROHLINGER (https://github.com/RenaudRohlinger)",
   "homepage": "https://github.com/RenaudRohlinger/stats-gl",
@@ -8,17 +8,19 @@
   "license": "MIT",
   "files": [
     "dist/*",
-    "lib/*"
+    "lib/*",
+    "addons/*"
   ],
   "types": "./dist/stats-gl.d.ts",
   "main": "./dist/main.cjs",
   "module": "./dist/main.js",
   "exports": {
-  ".": {
+    ".": {
       "types": "./dist/stats-gl.d.ts",
       "require": "./dist/main.cjs",
       "import": "./dist/main.js"
-    }
+    },
+    "./addons/*": "./addons/*"
   },
   "sideEffects": false,
   "scripts": {

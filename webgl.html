@@ -106,33 +106,32 @@
 
     <div class="code-overlay">
       <div class="nav-tabs">
-        <a
-          href="/"
-          class="nav-tab"
-          >Three.js</a
-        >
-        <a
-          href="/webgl.html"
-          class="nav-tab active"
-          >WebGL</a
-        >
+        <a href="/" class="nav-tab">Three.js</a>
+        <a href="/webgl.html" class="nav-tab active">WebGL</a>
+        <a href="/webgpu.html" class="nav-tab">WebGPU</a>
+        <a href="/worker.html" class="nav-tab">Worker</a>
+        <a href="/worker_tsl.html" class="nav-tab">Worker TSL</a>
       </div>
       <pre>
-<span class="comment">// WebGL example</span>
+<span class="comment">// WebGL example with texture panels</span>
 
 <span class="keyword">import</span> Stats <span class="keyword">from</span> <span class="string">'stats-gl'</span>
 
 <span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true });
-<span class="keyword">const</span> canvas = document.querySelector(<span class="string">'#glcanvas'</span>);
 stats.init(canvas);
-document.body.appendChild(stats.dom);
+
+<span class="comment">// Create texture preview panels</span>
+stats.addTexturePanel(<span class="string">'Color'</span>);
+stats.addTexturePanel(<span class="string">'Luma'</span>);
+stats.setTextureWebGL(<span class="string">'Color'</span>, colorFbo, 256, 256);
+stats.setTextureWebGL(<span class="string">'Luma'</span>, lumaFbo, 256, 256);
 
 <span class="keyword">function</span> animate() {
-    requestAnimationFrame(animate);
     stats.begin();
-    render();
+    renderPlasmaToFBO();
+    renderLuminancePass();
+    blitToScreen();
     stats.end();
-
     stats.update();
 }</pre>
     </div>
@@ -154,172 +153,255 @@ document.body.appendChild(stats.dom);
 
         <script type="module">
           import Stats from './dist/main.js';
-          // import Stats from './lib/main.ts';
 
-          // Initialize stats
-          const stats = new Stats({ trackGPU: true, trackHz: true });
+          // Initialize canvas
           const canvas = document.querySelector('#glcanvas');
-          stats.init(canvas);
-          document.body.appendChild(stats.dom);
+          const dpr = window.devicePixelRatio || 1;
 
-          // Initialize WebGL with antialiasing
+          function resizeCanvas() {
+            canvas.width = Math.floor(canvas.clientWidth * dpr);
+            canvas.height = Math.floor(canvas.clientHeight * dpr);
+          }
+          resizeCanvas();
+          window.addEventListener('resize', resizeCanvas);
+
+          // Initialize WebGL2
           const gl = canvas.getContext('webgl2', {
             antialias: true,
             alpha: false,
           });
 
-          // Create shader program
-          const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-          gl.shaderSource(
-            vertexShader,
-            `
-                attribute vec2 position;
-                attribute vec2 uv;
-                uniform float rotation;
-                uniform float aspect;
-                
-                varying vec2 vUv;
-                
-                void main() {
-                    float scale = min(1.0, aspect) * 0.5;
-                    float c = cos(rotation);
-                    float s = sin(rotation);
-                    mat2 rotationMatrix = mat2(c, -s, s, c);
-                    vec2 scaledPos = position * scale;
-                    vec2 rotatedPos = rotationMatrix * scaledPos;
-                    rotatedPos.x /= aspect;
-                    
-                    vUv = uv;
-                    gl_Position = vec4(rotatedPos, 0.0, 1.0);
-                }
-            `
-          );
-          gl.compileShader(vertexShader);
+          // Initialize stats
+          const stats = new Stats({ trackGPU: true, trackHz: true });
+          await stats.init(canvas);
+          document.body.appendChild(stats.dom);
 
-          const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-          gl.shaderSource(
-            fragmentShader,
-            `
-                precision mediump float;
-                varying vec2 vUv;
-                
-                void main() {
-                    // Create RGB from UV coordinates
-                    gl_FragColor = vec4(vUv.x, vUv.y, 1.0 - (vUv.x + vUv.y) * 0.5, 1.0);
-                }
-            `
-          );
-          gl.compileShader(fragmentShader);
+          // ========================================
+          // Create Color FBO (256x256)
+          // ========================================
+          const fboSize = 256;
 
-          const program = gl.createProgram();
-          gl.attachShader(program, vertexShader);
-          gl.attachShader(program, fragmentShader);
-          gl.linkProgram(program);
+          const colorTexture = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, colorTexture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, fboSize, fboSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-          // Create triangle vertices with UV coordinates
-          const vertices = new Float32Array([
-            // Position (x,y)   UV (u,v)
-            0.0,
-            1.0,
-            0.5,
-            0.0, // top
-            -0.866,
-            -0.5,
-            0.0,
-            1.0, // bottom left
-            0.866,
-            -0.5,
-            1.0,
-            1.0, // bottom right
-          ]);
+          const colorFbo = gl.createFramebuffer();
+          gl.bindFramebuffer(gl.FRAMEBUFFER, colorFbo);
+          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorTexture, 0);
 
-          const vertexBuffer = gl.createBuffer();
-          gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-          gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+          // ========================================
+          // Create Luminance FBO (256x256)
+          // ========================================
+          const lumaTexture = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, lumaTexture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, fboSize, fboSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-          // Get attribute and uniform locations
-          const positionLocation = gl.getAttribLocation(program, 'position');
-          const uvLocation = gl.getAttribLocation(program, 'uv');
-          const rotationLocation = gl.getUniformLocation(program, 'rotation');
-          const aspectLocation = gl.getUniformLocation(program, 'aspect');
+          const lumaFbo = gl.createFramebuffer();
+          gl.bindFramebuffer(gl.FRAMEBUFFER, lumaFbo);
+          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, lumaTexture, 0);
 
-          // Animation variables
-          let rotation = 0;
-          let lastTime = 0;
+          // Create texture preview panels
+          stats.addTexturePanel('Color');
+          stats.addTexturePanel('Luma');
+          stats.setTextureWebGL('Color', colorFbo, fboSize, fboSize);
+          stats.setTextureWebGL('Luma', lumaFbo, fboSize, fboSize);
 
-          function render(currentTime = 0) {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-            const now = performance.now();
-            const workStartTime = now;
-            // Update rotation
-            const deltaTime = (currentTime - lastTime) * 0.001;
-            lastTime = currentTime;
-            rotation += deltaTime;
-
-            // Resize canvas to match display size with devicePixelRatio
-            const dpr = window.devicePixelRatio || 1;
-            const displayWidth = Math.floor(canvas.clientWidth * dpr);
-            const displayHeight = Math.floor(canvas.clientHeight * dpr);
-
-            if (
-              canvas.width !== displayWidth ||
-              canvas.height !== displayHeight
-            ) {
-              canvas.width = displayWidth;
-              canvas.height = displayHeight;
-              gl.viewport(0, 0, displayWidth, displayHeight);
+          // ========================================
+          // Plasma shader (renders to color FBO)
+          // ========================================
+          const plasmaVert = gl.createShader(gl.VERTEX_SHADER);
+          gl.shaderSource(plasmaVert, `#version 300 es
+            in vec2 position;
+            out vec2 vUv;
+            void main() {
+              vUv = position * 0.5 + 0.5;
+              gl_Position = vec4(position, 0.0, 1.0);
             }
+          `);
+          gl.compileShader(plasmaVert);
 
-            const aspect = displayWidth / displayHeight;
+          const plasmaFrag = gl.createShader(gl.FRAGMENT_SHADER);
+          gl.shaderSource(plasmaFrag, `#version 300 es
+            precision highp float;
+            in vec2 vUv;
+            out vec4 fragColor;
+            uniform float time;
 
-            // Clear canvas
-            gl.clearColor(0.1, 0.1, 0.1, 1.0);
-            gl.clear(gl.COLOR_BUFFER_BIT);
+            void main() {
+              float x = vUv.x * 10.0;
+              float y = vUv.y * 10.0;
+              float t = time * 2.0;
 
-            // Start stats tracking
+              float v1 = sin(x + t);
+              float v2 = sin(y + t);
+              float v3 = sin(x + y + t);
+              float v4 = sin(sqrt(x*x + y*y) + t);
+
+              float v = (v1 + v2 + v3 + v4) * 0.25;
+
+              vec3 color = vec3(
+                sin(v * 3.14159) * 0.5 + 0.5,
+                sin(v * 3.14159 + 2.094) * 0.5 + 0.5,
+                sin(v * 3.14159 + 4.188) * 0.5 + 0.5
+              );
+
+              fragColor = vec4(color, 1.0);
+            }
+          `);
+          gl.compileShader(plasmaFrag);
+
+          const plasmaProgram = gl.createProgram();
+          gl.attachShader(plasmaProgram, plasmaVert);
+          gl.attachShader(plasmaProgram, plasmaFrag);
+          gl.linkProgram(plasmaProgram);
+
+          const plasmaTimeLoc = gl.getUniformLocation(plasmaProgram, 'time');
+
+          // ========================================
+          // Luminance shader (reads color, writes luma)
+          // ========================================
+          const lumaVert = gl.createShader(gl.VERTEX_SHADER);
+          gl.shaderSource(lumaVert, `#version 300 es
+            in vec2 position;
+            out vec2 vUv;
+            void main() {
+              vUv = position * 0.5 + 0.5;
+              gl_Position = vec4(position, 0.0, 1.0);
+            }
+          `);
+          gl.compileShader(lumaVert);
+
+          const lumaFrag = gl.createShader(gl.FRAGMENT_SHADER);
+          gl.shaderSource(lumaFrag, `#version 300 es
+            precision highp float;
+            in vec2 vUv;
+            out vec4 fragColor;
+            uniform sampler2D colorTex;
+
+            void main() {
+              vec3 color = texture(colorTex, vUv).rgb;
+              // ITU-R BT.709 luminance coefficients
+              float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+              fragColor = vec4(vec3(luma), 1.0);
+            }
+          `);
+          gl.compileShader(lumaFrag);
+
+          const lumaProgram = gl.createProgram();
+          gl.attachShader(lumaProgram, lumaVert);
+          gl.attachShader(lumaProgram, lumaFrag);
+          gl.linkProgram(lumaProgram);
+
+          const lumaColorTexLoc = gl.getUniformLocation(lumaProgram, 'colorTex');
+
+          // ========================================
+          // Blit shader (display color FBO on screen)
+          // ========================================
+          const blitVert = gl.createShader(gl.VERTEX_SHADER);
+          gl.shaderSource(blitVert, `#version 300 es
+            in vec2 position;
+            out vec2 vUv;
+            uniform float aspect;
+            void main() {
+              vUv = position * 0.5 + 0.5;
+              vec2 pos = position * 0.4;
+              pos.x /= aspect;
+              gl_Position = vec4(pos, 0.0, 1.0);
+            }
+          `);
+          gl.compileShader(blitVert);
+
+          const blitFrag = gl.createShader(gl.FRAGMENT_SHADER);
+          gl.shaderSource(blitFrag, `#version 300 es
+            precision highp float;
+            in vec2 vUv;
+            out vec4 fragColor;
+            uniform sampler2D tex;
+            void main() {
+              fragColor = texture(tex, vUv);
+            }
+          `);
+          gl.compileShader(blitFrag);
+
+          const blitProgram = gl.createProgram();
+          gl.attachShader(blitProgram, blitVert);
+          gl.attachShader(blitProgram, blitFrag);
+          gl.linkProgram(blitProgram);
+
+          const blitAspectLoc = gl.getUniformLocation(blitProgram, 'aspect');
+          const blitTexLoc = gl.getUniformLocation(blitProgram, 'tex');
+
+          // Fullscreen quad
+          const quadVerts = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+          const quadBuffer = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+          gl.bufferData(gl.ARRAY_BUFFER, quadVerts, gl.STATIC_DRAW);
+
+          const positionLoc = gl.getAttribLocation(plasmaProgram, 'position');
+
+          let startTime = performance.now();
+
+          function render() {
+            const time = (performance.now() - startTime) * 0.001;
+            const aspect = canvas.width / canvas.height;
+
             stats.begin();
 
-            // Draw triangle
-            gl.useProgram(program);
-            gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+            gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-            // Setup position attribute
-            gl.enableVertexAttribArray(positionLocation);
-            gl.vertexAttribPointer(
-              positionLocation,
-              2,
-              gl.FLOAT,
-              false,
-              4 * 4,
-              0
-            );
+            // 1. Render plasma to color FBO
+            gl.bindFramebuffer(gl.FRAMEBUFFER, colorFbo);
+            gl.viewport(0, 0, fboSize, fboSize);
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
 
-            // Setup UV attribute
-            gl.enableVertexAttribArray(uvLocation);
-            gl.vertexAttribPointer(
-              uvLocation,
-              2,
-              gl.FLOAT,
-              false,
-              4 * 4,
-              2 * 4
-            );
+            gl.useProgram(plasmaProgram);
+            gl.uniform1f(plasmaTimeLoc, time);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-            gl.uniform1f(rotationLocation, rotation);
-            gl.uniform1f(aspectLocation, aspect);
-            gl.drawArrays(gl.TRIANGLES, 0, 3);
+            // 2. Render luminance pass to luma FBO
+            gl.bindFramebuffer(gl.FRAMEBUFFER, lumaFbo);
+            gl.viewport(0, 0, fboSize, fboSize);
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
 
-            // End stats tracking
+            gl.useProgram(lumaProgram);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, colorTexture);
+            gl.uniform1i(lumaColorTexLoc, 0);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+            // 3. Render color FBO to screen
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clearColor(0.1, 0.1, 0.1, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            gl.useProgram(blitProgram);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, colorTexture);
+            gl.uniform1i(blitTexLoc, 0);
+            gl.uniform1f(blitAspectLoc, aspect);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
             stats.end();
-
             stats.update();
-
-            // console.log('Frame time:', performance.now() - now);
 
             requestAnimationFrame(render);
           }
 
-          // Start animation
           render();
         </script>
       </body>

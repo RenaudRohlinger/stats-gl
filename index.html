@@ -166,16 +166,11 @@
 
     <div class="code-overlay">
       <div class="nav-tabs">
-        <a
-          href="/"
-          class="nav-tab active"
-          >Three.js</a
-        >
-        <a
-          href="/webgl.html"
-          class="nav-tab"
-          >WebGL</a
-        >
+        <a href="/" class="nav-tab active">Three.js</a>
+        <a href="/webgl.html" class="nav-tab">WebGL</a>
+        <a href="/webgpu.html" class="nav-tab">WebGPU</a>
+        <a href="/worker.html" class="nav-tab">Worker</a>
+        <a href="/worker_tsl.html" class="nav-tab">Worker TSL</a>
       </div>
       <pre>
 <span class="comment">// Threejs example</span>
@@ -188,8 +183,9 @@ stats.init( renderer );
 container.appendChild( stats.dom );
 
 <span class="keyword">function</span> animate() {
-    requestAnimationFrame( animate );
     renderer.render( scene, camera );
+    renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER );
+    renderer.resolveTimestampsAsync( THREE.TimestampQuery.COMPUTE );
     stats.update();
 };</pre>
     </div>
@@ -212,22 +208,24 @@ container.appendChild( stats.dom );
     <script type="importmap">
       {
         "imports": {
-          "three": "https://unpkg.com/three@0.170.0/build/three.webgpu.js",
-          "three/tsl": "https://unpkg.com/three@0.170.0/build/three.webgpu.js"
+          "three": "https://esm.sh/three@0.182.0/build/three.webgpu.js",
+          "three/tsl": "https://esm.sh/three@0.182.0/build/three.webgpu.js",
+          "three/webgpu": "https://esm.sh/three@0.182.0/build/three.webgpu.js",
+          "three/addons/": "https://esm.sh/three@0.182.0/examples/jsm/"
         }
       }
     </script>
 
     <script type="module">
-      import * as THREE from 'three';
+      import * as THREE from 'three/webgpu';
 
       import Stats from './dist/main.js';
       // import Stats from './lib/main.ts';
-      import { OrbitControls } from 'https://unpkg.com/three@0.170.0/examples/jsm/controls/OrbitControls.js';
+      import { OrbitControls } from 'https://unpkg.com/three@0.182.0/examples/jsm/controls/OrbitControls.js';
 
-      import { GLTFLoader } from 'https://unpkg.com/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
+      import { GLTFLoader } from 'https://unpkg.com/three@0.182.0/examples/jsm/loaders/GLTFLoader.js';
       import {
-        storage,
+        instancedArray,
         instanceIndex,
         If,
         vec3,
@@ -238,17 +236,11 @@ container.appendChild( stats.dom );
       } from 'three/tsl';
 
       const size = 32;
-      const array = new Array(size).fill(0);
 
-      const arrayBuffer = new THREE.StorageInstancedBufferAttribute(
-        new Float32Array(array),
-        3
-      );
+      const storageBuffer = instancedArray(size, 'vec3');
 
       const compute = Fn(() => {
-        storage(arrayBuffer, 'vec3', size)
-          .element(instanceIndex)
-          .assign(instanceIndex);
+        storageBuffer.element(instanceIndex).assign(vec3(instanceIndex));
       })().compute(size);
 
       let mixer;
@@ -332,13 +324,14 @@ container.appendChild( stats.dom );
 
         controls.update();
 
-        await renderer.renderAsync(scene, camera);
-        await renderer.computeAsync(compute);
+        renderer.render(scene, camera);
+        renderer.compute(compute);
 
         // survivorsValue = (survivorsValue + delta * size * 0.25) % size;
         // survivorsPanel.update(survivorsValue, size, 2);
         // survivorsPanel.updateGraph(survivorsValue, size);
-
+        renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER )
+        renderer.resolveTimestampsAsync( THREE.TimestampQuery.COMPUTE )
         stats.update();
       }
     </script>

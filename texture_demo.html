@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stats-GL - Texture Panel Demo</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #000;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      canvas {
+        width: 100vw;
+        height: 100vh;
+      }
+      .code-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        padding: 14px;
+        background-color: #1e1e1ef8;
+        color: #d4d4d4;
+        overflow: auto;
+        margin: 0;
+        font-family: 'Courier New', Courier, monospace;
+        @media screen and (max-width: 608px) {
+          display: none;
+        }
+      }
+      .nav-tabs {
+        display: flex;
+        gap: 1px;
+        margin-top: -14px;
+        position: absolute;
+        right: 0;
+        margin-bottom: 14px;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      .nav-tab {
+        background: #1e1e1ef8;
+        color: #d4d4d4;
+        padding: 4px 8px;
+        text-decoration: none;
+        font-size: 12px;
+        transition: background-color 0.2s;
+      }
+      .nav-tab:hover {
+        background: #3d3d3d;
+      }
+      .nav-tab.active {
+        background: #3d3d3d;
+      }
+      pre {
+        margin: 0;
+      }
+      .keyword {
+        color: #569cd6;
+      }
+      .comment {
+        color: #6a9955;
+      }
+      .string {
+        color: #ce9178;
+      }
+      ::selection {
+        background: #264f78;
+      }
+
+      #footer {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        color: #fff;
+        font-size: 14px;
+        padding: 14px;
+        text-align: right;
+        background-color: #1e1e1ef8;
+      }
+      #footer a {
+        color: #fff;
+        font-weight: bold;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="glcanvas"></canvas>
+
+    <div class="code-overlay">
+      <div class="nav-tabs">
+        <a href="/" class="nav-tab">Three.js</a>
+        <a href="/webgl.html" class="nav-tab">WebGL</a>
+        <a href="/index_worker.html" class="nav-tab">Worker</a>
+        <a href="/texture_demo.html" class="nav-tab active">Texture</a>
+        <a href="/worker_texture_demo.html" class="nav-tab">Tex Worker</a>
+        <a href="/worker_tsl.html" class="nav-tab">MRT</a>
+      </div>
+      <pre>
+<span class="comment">// Texture Panel Demo</span>
+<span class="comment">// Color FBO + Luminance pass (panel only)</span>
+
+<span class="keyword">import</span> Stats <span class="keyword">from</span> <span class="string">'stats-gl'</span>
+
+<span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true });
+stats.init(canvas);
+
+<span class="comment">// Create texture preview panels</span>
+stats.addTexturePanel(<span class="string">'Color'</span>);
+stats.addTexturePanel(<span class="string">'Luma'</span>);
+
+<span class="comment">// Set FBO sources</span>
+stats.setTextureWebGL(<span class="string">'Color'</span>, colorFbo, 512, 512);
+stats.setTextureWebGL(<span class="string">'Luma'</span>, lumaFbo, 512, 512);
+
+<span class="keyword">function</span> animate() {
+    stats.begin();
+    renderToColorFBO();
+    renderLuminancePass(); <span class="comment">// Panel only</span>
+    stats.end();
+    stats.update();
+}</pre>
+    </div>
+
+    <div id="footer">
+      Made with love by
+      <a href="https://twitter.com/onirenaud" target="_blank">@onirenaud</a>
+      -
+      <a href="https://twitter.com/utsuboco" target="_blank">@utsuboco</a>
+    </div>
+
+    <script type="module">
+      import Stats from './dist/main.js';
+
+      // Initialize canvas
+      const canvas = document.querySelector('#glcanvas');
+      const dpr = window.devicePixelRatio || 1;
+
+      function resizeCanvas() {
+        canvas.width = Math.floor(canvas.clientWidth * dpr);
+        canvas.height = Math.floor(canvas.clientHeight * dpr);
+      }
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      // Initialize WebGL2
+      const gl = canvas.getContext('webgl2', {
+        antialias: true,
+        alpha: false,
+      });
+
+      // Initialize stats
+      const stats = new Stats({ trackGPU: true, trackHz: true });
+      await stats.init(canvas);
+      document.body.appendChild(stats.dom);
+
+      // ========================================
+      // Create Color FBO (512x512)
+      // ========================================
+      const fboSize = 512;
+
+      const colorTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, colorTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, fboSize, fboSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      const colorFbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, colorFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorTexture, 0);
+
+      // ========================================
+      // Create Luminance FBO (512x512)
+      // ========================================
+      const lumaTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, lumaTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, fboSize, fboSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      const lumaFbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, lumaFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, lumaTexture, 0);
+
+      // Create texture preview panels
+      stats.addTexturePanel('Color');
+      stats.addTexturePanel('Luma');
+      stats.setTextureWebGL('Color', colorFbo, fboSize, fboSize);
+      stats.setTextureWebGL('Luma', lumaFbo, fboSize, fboSize);
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      // ========================================
+      // Plasma shader (renders to color FBO)
+      // ========================================
+      const plasmaVert = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(plasmaVert, `#version 300 es
+        in vec2 position;
+        out vec2 vUv;
+        void main() {
+          vUv = position * 0.5 + 0.5;
+          gl_Position = vec4(position, 0.0, 1.0);
+        }
+      `);
+      gl.compileShader(plasmaVert);
+
+      const plasmaFrag = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(plasmaFrag, `#version 300 es
+        precision highp float;
+        in vec2 vUv;
+        out vec4 fragColor;
+        uniform float time;
+
+        void main() {
+          float x = vUv.x * 10.0;
+          float y = vUv.y * 10.0;
+          float t = time * 2.0;
+
+          float v1 = sin(x + t);
+          float v2 = sin(y + t);
+          float v3 = sin(x + y + t);
+          float v4 = sin(sqrt(x*x + y*y) + t);
+
+          float v = (v1 + v2 + v3 + v4) * 0.25;
+
+          vec3 color = vec3(
+            sin(v * 3.14159) * 0.5 + 0.5,
+            sin(v * 3.14159 + 2.094) * 0.5 + 0.5,
+            sin(v * 3.14159 + 4.188) * 0.5 + 0.5
+          );
+
+          fragColor = vec4(color, 1.0);
+        }
+      `);
+      gl.compileShader(plasmaFrag);
+
+      const plasmaProgram = gl.createProgram();
+      gl.attachShader(plasmaProgram, plasmaVert);
+      gl.attachShader(plasmaProgram, plasmaFrag);
+      gl.linkProgram(plasmaProgram);
+
+      const plasmaTimeLoc = gl.getUniformLocation(plasmaProgram, 'time');
+
+      // ========================================
+      // Luminance shader (reads color, writes luma)
+      // ========================================
+      const lumaVert = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(lumaVert, `#version 300 es
+        in vec2 position;
+        out vec2 vUv;
+        void main() {
+          vUv = position * 0.5 + 0.5;
+          gl_Position = vec4(position, 0.0, 1.0);
+        }
+      `);
+      gl.compileShader(lumaVert);
+
+      const lumaFrag = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(lumaFrag, `#version 300 es
+        precision highp float;
+        in vec2 vUv;
+        out vec4 fragColor;
+        uniform sampler2D colorTex;
+
+        void main() {
+          vec3 color = texture(colorTex, vUv).rgb;
+          // ITU-R BT.709 luminance coefficients
+          float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+          fragColor = vec4(vec3(luma), 1.0);
+        }
+      `);
+      gl.compileShader(lumaFrag);
+
+      const lumaProgram = gl.createProgram();
+      gl.attachShader(lumaProgram, lumaVert);
+      gl.attachShader(lumaProgram, lumaFrag);
+      gl.linkProgram(lumaProgram);
+
+      const lumaColorTexLoc = gl.getUniformLocation(lumaProgram, 'colorTex');
+
+      // ========================================
+      // Blit shader (display color FBO on screen)
+      // ========================================
+      const blitVert = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(blitVert, `#version 300 es
+        in vec2 position;
+        out vec2 vUv;
+        uniform float aspect;
+        void main() {
+          vUv = position * 0.5 + 0.5;
+          vec2 pos = position * 0.4;
+          pos.x /= aspect;
+          gl_Position = vec4(pos, 0.0, 1.0);
+        }
+      `);
+      gl.compileShader(blitVert);
+
+      const blitFrag = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(blitFrag, `#version 300 es
+        precision highp float;
+        in vec2 vUv;
+        out vec4 fragColor;
+        uniform sampler2D tex;
+        void main() {
+          fragColor = texture(tex, vUv);
+        }
+      `);
+      gl.compileShader(blitFrag);
+
+      const blitProgram = gl.createProgram();
+      gl.attachShader(blitProgram, blitVert);
+      gl.attachShader(blitProgram, blitFrag);
+      gl.linkProgram(blitProgram);
+
+      const blitAspectLoc = gl.getUniformLocation(blitProgram, 'aspect');
+      const blitTexLoc = gl.getUniformLocation(blitProgram, 'tex');
+
+      // Fullscreen quad
+      const quadVerts = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+      const quadBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, quadVerts, gl.STATIC_DRAW);
+
+      const positionLoc = gl.getAttribLocation(plasmaProgram, 'position');
+
+      let startTime = performance.now();
+
+      function render() {
+        const time = (performance.now() - startTime) * 0.001;
+        const aspect = canvas.width / canvas.height;
+
+        stats.begin();
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+        // 1. Render plasma to color FBO
+        gl.bindFramebuffer(gl.FRAMEBUFFER, colorFbo);
+        gl.viewport(0, 0, fboSize, fboSize);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.useProgram(plasmaProgram);
+        gl.uniform1f(plasmaTimeLoc, time);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        // 2. Render luminance pass to luma FBO (panel only, not shown on screen)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, lumaFbo);
+        gl.viewport(0, 0, fboSize, fboSize);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.useProgram(lumaProgram);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, colorTexture);
+        gl.uniform1i(lumaColorTexLoc, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        // 3. Render color FBO to screen (luma is panel-only)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.clearColor(0.1, 0.1, 0.1, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.useProgram(blitProgram);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, colorTexture);
+        gl.uniform1i(blitTexLoc, 0);
+        gl.uniform1f(blitAspectLoc, aspect);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        stats.end();
+        stats.update();
+
+        requestAnimationFrame(render);
+      }
+
+      render();
+    </script>
+  </body>
+</html>

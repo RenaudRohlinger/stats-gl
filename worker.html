@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stats-GL - Worker Texture Demo</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #111;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      .code-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        padding: 14px;
+        background-color: #1e1e1ef8;
+        color: #d4d4d4;
+        overflow: auto;
+        margin: 0;
+        font-family: 'Courier New', Courier, monospace;
+        @media screen and (max-width: 608px) {
+          display: none;
+        }
+      }
+      .nav-tabs {
+        display: flex;
+        gap: 1px;
+        margin-top: -14px;
+        position: absolute;
+        right: 0;
+        margin-bottom: 14px;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      .nav-tab {
+        background: #1e1e1ef8;
+        color: #d4d4d4;
+        padding: 4px 8px;
+        text-decoration: none;
+        font-size: 12px;
+        transition: background-color 0.2s;
+      }
+      .nav-tab:hover {
+        background: #3d3d3d;
+      }
+      .nav-tab.active {
+        background: #3d3d3d;
+      }
+      pre {
+        margin: 0;
+      }
+      .keyword {
+        color: #569cd6;
+      }
+      .comment {
+        color: #6a9955;
+      }
+      .string {
+        color: #ce9178;
+      }
+      ::selection {
+        background: #264f78;
+      }
+
+      #footer {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        color: #fff;
+        font-size: 14px;
+        padding: 14px;
+        text-align: right;
+        background-color: #1e1e1ef8;
+      }
+      #footer a {
+        color: #fff;
+        font-weight: bold;
+        text-decoration: none;
+      }
+
+      #render-canvas {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 512px;
+        height: 512px;
+        display: none;
+      }
+      #render-canvas.visible {
+        display: block;
+      }
+
+      .controls {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        display: flex;
+        gap: 8px;
+        z-index: 100;
+      }
+      .controls button {
+        background: #333;
+        color: #fff;
+        border: none;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .controls button:hover {
+        background: #555;
+      }
+      #stress-main {
+        background: #2d5a2d;
+      }
+      #stress-main:hover {
+        background: #3d7a3d;
+      }
+      #stress-main.active {
+        opacity: 0.6;
+      }
+      #stress-worker {
+        background: #8a5a2d;
+      }
+      #stress-worker:hover {
+        background: #aa6a3d;
+      }
+      #stress-worker.active {
+        opacity: 0.6;
+      }
+
+      .info {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #666;
+        font-size: 14px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="render-canvas" width="512" height="512"></canvas>
+
+    <div class="controls">
+      <button id="stress-main">Stress Main</button>
+      <button id="stress-worker">Stress Worker</button>
+      <button id="toggle-btn">Show Canvas</button>
+    </div>
+
+    <div class="info" id="info-text">
+      Rendering in OffscreenCanvas worker<br>
+      Texture previews transferred via ImageBitmap
+    </div>
+
+    <div class="code-overlay">
+      <div class="nav-tabs">
+        <a href="/" class="nav-tab">Three.js</a>
+        <a href="/webgl.html" class="nav-tab">WebGL</a>
+        <a href="/webgpu.html" class="nav-tab">WebGPU</a>
+        <a href="/worker.html" class="nav-tab active">Worker</a>
+        <a href="/worker_tsl.html" class="nav-tab">Worker TSL</a>
+      </div>
+      <pre>
+<span class="comment">// Worker Texture Demo</span>
+<span class="comment">// Textures captured in worker, transferred to main</span>
+
+<span class="comment">// Worker side:</span>
+<span class="keyword">const</span> bitmap = <span class="keyword">await</span> profiler.captureTexture({
+    framebuffer, width, height
+});
+postMessage(
+    { type: <span class="string">'texture'</span>, name, bitmap, width, height },
+    [bitmap] <span class="comment">// Transferable</span>
+);
+
+<span class="comment">// Main thread:</span>
+worker.onmessage = (e) => {
+    <span class="keyword">if</span> (e.data.type === <span class="string">'texture'</span>) {
+        stats.setTextureBitmap(
+            e.data.name,
+            e.data.bitmap,
+            e.data.width,
+            e.data.height
+        );
+    }
+};</pre>
+    </div>
+
+    <div id="footer">
+      Made with love by
+      <a href="https://twitter.com/onirenaud" target="_blank">@onirenaud</a>
+      -
+      <a href="https://twitter.com/utsuboco" target="_blank">@utsuboco</a>
+    </div>
+
+    <script type="module">
+      import Stats from './lib/main.ts';
+
+      // Initialize stats (no canvas - worker handles rendering)
+      const stats = new Stats({ trackGPU: true, trackHz: true });
+      document.body.appendChild(stats.dom);
+
+      // Create texture preview panels
+      stats.addTexturePanel('Color');
+      stats.addTexturePanel('Luma');
+
+      // Get canvas and transfer control to offscreen
+      const canvas = document.getElementById('render-canvas');
+      const offscreen = canvas.transferControlToOffscreen();
+
+      // Toggle canvas visibility (visible by default)
+      const toggleBtn = document.getElementById('toggle-btn');
+      const infoText = document.getElementById('info-text');
+      let canvasVisible = true;
+      canvas.classList.add('visible');
+      infoText.style.display = 'none';
+      toggleBtn.textContent = 'Hide Canvas';
+
+      toggleBtn.addEventListener('click', () => {
+        canvasVisible = !canvasVisible;
+        canvas.classList.toggle('visible', canvasVisible);
+        infoText.style.display = canvasVisible ? 'none' : 'block';
+        toggleBtn.textContent = canvasVisible ? 'Hide Canvas' : 'Show Canvas';
+      });
+
+      // Stress test state
+      let stressMain = false;
+      let stressWorkerFlag = false;
+
+      // Heavy computation function (1M iterations)
+      function heavyComputation() {
+        let result = 0;
+        for (let i = 0; i < 1000000; i++) {
+          result += Math.sqrt(i) * Math.sin(i);
+        }
+        return result;
+      }
+
+      // Stress buttons
+      const stressMainBtn = document.getElementById('stress-main');
+      const stressWorkerBtn = document.getElementById('stress-worker');
+
+      stressMainBtn.addEventListener('click', () => {
+        stressMain = !stressMain;
+        stressMainBtn.classList.toggle('active', stressMain);
+        stressMainBtn.textContent = stressMain ? 'Stop Main' : 'Stress Main';
+      });
+
+      stressWorkerBtn.addEventListener('click', () => {
+        stressWorkerFlag = !stressWorkerFlag;
+        stressWorkerBtn.classList.toggle('active', stressWorkerFlag);
+        stressWorkerBtn.textContent = stressWorkerFlag ? 'Stop Worker' : 'Stress Worker';
+        worker.postMessage({ type: 'stress', enabled: stressWorkerFlag });
+      });
+
+      // Create worker
+      const worker = new Worker(
+        new URL('./demo/texture_worker.js', import.meta.url),
+        { type: 'module' }
+      );
+
+      // Handle messages from worker
+      worker.onmessage = (e) => {
+        const { type, data, name, bitmap, width, height } = e.data;
+
+        if (type === 'stats') {
+          // Update stats from worker data (don't call update here, main loop handles it)
+          stats.setData(data);
+        } else if (type === 'texture') {
+          // Update texture panel with transferred bitmap
+          stats.setTextureBitmap(name, bitmap, width, height);
+        }
+      };
+
+      // Transfer canvas to worker
+      worker.postMessage({ type: 'init', canvas: offscreen }, [offscreen]);
+
+      // Main thread loop for stress test
+      function mainLoop() {
+        stats.begin();
+        if (stressMain) {
+          heavyComputation();
+        }
+        stats.update();
+        requestAnimationFrame(mainLoop);
+      }
+      mainLoop();
+    </script>
+  </body>
+</html>

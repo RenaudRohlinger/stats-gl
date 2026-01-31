@@ -1,112 +1,115 @@
-# 📈 stats-gl
+# stats-gl
 [![Version](https://img.shields.io/npm/v/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
 [![Version](https://img.shields.io/npm/dw/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
 
-WebGL/WebGPU Performance Monitor tool.
+WebGL/WebGPU Performance Monitor with real-time FPS, CPU, and GPU timing. Supports Three.js, native WebGL2/WebGPU, Web Workers, and texture preview panels.
 
-🔗 [Live Demo](https://stats.renaudrohlinger.com/)
+[Live Demo](https://stats.renaudrohlinger.com/)
 
 
 https://github.com/RenaudRohlinger/stats-gl/assets/15867665/3fdafff4-1357-4872-9baf-0629dbaf9d8c
 
 
-### ❗📢 Note: To support GPU monitoring on Safari you need to enable Timer Queries under WebKit Feature Flags > WebGL Timer Queries  
+### Note: To support GPU monitoring on Safari you need to enable Timer Queries under WebKit Feature Flags > WebGL Timer Queries
 
-## 📚 Description
-
-`stats-gl` is a comprehensive tool to monitor WebGL performance. The Stats class provides methods to create performance panels, log performance metrics, and manage the display and layout of these panels. The performance metrics logged include FPS, CPU, and GPU. The GPU logging is available only if the user's browser supports the WebGL 2.0 `EXT_disjoint_timer_query_webgl2` extension or WebGPU Timestamp Queries.
-
-In addition to logging real-time performance data, the class also provides methods to calculate and display average performance metrics over a specified interval.
-
-## ⬇️ Installation
-
-Stats-gl is available as an npm package. You can install it using the following command:
+## Installation
 
 ```bash
 npm install stats-gl
 ```
 
-## 🧑‍💻 Example Usage
+## Quick Start
 
-Below is an example of how you can use this class in your code:
+### Three.js (WebGL or WebGPU)
+
 ```js
-import Stats from "stats-gl";
-
-// create a new Stats object
-const stats = new Stats({
-    trackFPS: true, // show built-in FPS/CPU panels (default)
-    trackGPU: false,
-    trackHz: false,
-    trackCPT: false,
-    logsPerSecond: 4,
-    graphsPerSecond: 30,
-    samplesLog: 40, 
-    samplesGraph: 10, 
-    precision: 2, 
-    horizontal: true,
-    minimal: false, 
-    mode: 0
-});
-
-// append the stats container to the body of the document
-document.body.appendChild( stats.dom );
-
-// begin the performance monitor
-stats.begin();
-// end the performance monitor
-stats.end();
-
-stats.begin();
-// gl.draw... second pass
-stats.end();
-
-
-// when all the passes are drawn update the logs
-stats.update();
-```
-
-
-Quick start with threejs:
-```js
+import Stats from 'stats-gl';
 import * as THREE from 'three';
 
-// use esm module instead of cjs
-import Stats from 'https://www.unpkg.com/stats-gl?module';
+const stats = new Stats({ trackGPU: true });
+document.body.appendChild(stats.dom);
 
-const container = document.getElementById( 'container' );
-
-const stats = new Stats();
-container.appendChild( stats.dom );
-
-const renderer = new THREE.WebGLRenderer( { antialias: true } ); // or WebGPURenderer
-container.appendChild( renderer.domElement );
-
-const scene = new THREE.Scene();
-
-stats.init( renderer ); // this will patch the threejs render function so no need to call begin() or end()
+const renderer = new THREE.WebGLRenderer(); // or WebGPURenderer
+stats.init(renderer);
 
 function animate() {
-
-    requestAnimationFrame( animate );
-
-    render(); // needs async methods in WebGPU (renderAsync)
-    stats.update();
-
+  renderer.render(scene, camera); // or renderAsync for WebGPU
+  stats.update();
 }
+renderer.setAnimationLoop(animate);
 ```
-Quick start with [@react-three/fiber](https://github.com/pmndrs/fiber). A `<StatsGl />` component is available through [@react-three/drei](https://github.com/pmndrs/drei):
+
+### Native WebGL2
+
+```js
+import Stats from 'stats-gl';
+
+const stats = new Stats({ trackGPU: true });
+const canvas = document.querySelector('#canvas');
+stats.init(canvas);
+document.body.appendChild(stats.dom);
+
+function animate() {
+  stats.begin();
+  // ... your WebGL draw calls ...
+  stats.end();
+  stats.update();
+  requestAnimationFrame(animate);
+}
+animate();
+```
+
+### Native WebGPU
+
+```js
+import Stats from 'stats-gl';
+
+const adapter = await navigator.gpu.requestAdapter();
+const device = await adapter.requestDevice({ requiredFeatures: ['timestamp-query'] });
+const context = canvas.getContext('webgpu');
+
+const stats = new Stats({ trackGPU: true });
+stats.init(device); // Pass the GPUDevice
+document.body.appendChild(stats.dom);
+
+function animate() {
+  stats.begin();
+
+  const encoder = device.createCommandEncoder();
+  const pass = encoder.beginRenderPass({
+    colorAttachments: [...],
+    timestampWrites: stats.getTimestampWrites() // Enable GPU timing
+  });
+  // ... your draw calls ...
+  pass.end();
+
+  stats.end(encoder); // Pass encoder to resolve timestamps
+  device.queue.submit([encoder.finish()]);
+
+  stats.update();
+  requestAnimationFrame(animate);
+}
+animate();
+```
+
+### React Three Fiber
+
+A `<StatsGl />` component is available through [@react-three/drei](https://github.com/pmndrs/drei):
+
 ```jsx
 import { Canvas } from '@react-three/fiber'
 import { StatsGl } from '@react-three/drei'
 
 const Scene = () => (
-    <Canvas>
-        <StatsGl />
-    </Canvas>
+  <Canvas>
+    <StatsGl />
+  </Canvas>
 )
 ```
 
-Quick start with [Tresjs](https://tresjs.org/) for Vue developers. A `<StatsGl />` component is available through [cientos](https://cientos.tresjs.org/guide/misc/stats-gl.html):
+### Tresjs (Vue)
+
+A `<StatsGl />` component is available through [cientos](https://cientos.tresjs.org/guide/misc/stats-gl.html):
 
 ```vue
 <script setup lang="ts">
@@ -120,34 +123,204 @@ import { StatsGl } from '@tresjs/cientos'
   </TresCanvas>
 </template>
 ```
-## ⚙️ Parameters
-The constructor for the Stats class accepts an options object with the following properties:
 
-- `logsPerSecond`: How often to log performance data, in logs per second.
-- `graphsPerSecond`: How often to update the graph, in graphs per second.
-- `trackFPS`: A boolean value to enable or disable the built-in FPS and CPU panels. Defaults to `true`. Set to `false` if you only want custom panels and/or GPU/Hz/CPT panels.
-- `trackGPU`: A boolean value to enable or disable GPU tracking.
-- `trackHz`: A boolean value to enable or disable Hz tracking.
-- `trackCPT`: (Threejs specific) A boolean value to enable or disable Threejs Compute Shading tracking.
-- `samplesLog`: Number of recent log samples to keep for computing averages.
-- `samplesGraph`: Number of recent graph samples to keep for computing averages.
-- `precision`: Precision of the data, in number of decimal places (only affects CPU and GPU).
-- `minimal`: A boolean value to control the minimalistic mode of the panel display. If set to true, a simple click on the panel will switch between different metrics.
-- `mode`: Sets the initial panel to display - 0 for FPS, 1 for CPU, and 2 for GPU (if supported).
-- `horizontal`: Display the canvases on the X axis, set to align on vertical axis.
+## Parameters
 
-All the parameters are optional and have default values. The class also provides other methods such as begin(), end(), init(canvas), etc. which can be used based on the requirement.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `trackFPS` | boolean | `true` | Enable built-in FPS and CPU panels |
+| `trackGPU` | boolean | `false` | Enable GPU timing (requires extension support) |
+| `trackHz` | boolean | `false` | Enable refresh rate detection |
+| `trackCPT` | boolean | `false` | Enable Three.js compute shader timing (WebGPU only) |
+| `logsPerSecond` | number | `4` | How often to update text display |
+| `graphsPerSecond` | number | `30` | How often to update graphs |
+| `samplesLog` | number | `40` | Number of samples for text averaging |
+| `samplesGraph` | number | `10` | Number of samples for graph averaging |
+| `precision` | number | `2` | Decimal places for CPU/GPU values |
+| `minimal` | boolean | `false` | Minimal mode - click to cycle panels |
+| `horizontal` | boolean | `true` | Horizontal panel layout |
+| `mode` | number | `0` | Initial panel (0=FPS, 1=CPU, 2=GPU) |
 
+## Web Worker / OffscreenCanvas
 
-## 🤝 Contributing
-Contributions to Stats-gl are welcome.
+stats-gl supports rendering in a Web Worker using OffscreenCanvas. Use `StatsProfiler` in the worker to collect timing data, and send it to the main thread where `Stats` displays it.
 
-Please report any issues or bugs you encounter.
+**Worker (offscreen rendering):**
+```js
+import { StatsProfiler } from 'stats-gl';
 
-## 📜 License
+const profiler = new StatsProfiler({ trackGPU: true });
+
+self.onmessage = async (e) => {
+  if (e.data.type === 'init') {
+    const canvas = e.data.canvas;
+    const gl = canvas.getContext('webgl2');
+    await profiler.init(gl);
+    requestAnimationFrame(loop);
+  }
+};
+
+function loop() {
+  profiler.begin();
+  // ... your rendering code ...
+  profiler.end();
+  profiler.update();
+
+  // Send timing data to main thread
+  self.postMessage({ type: 'stats', ...profiler.getData() });
+  requestAnimationFrame(loop);
+}
+```
+
+**Main thread:**
+```js
+import Stats from 'stats-gl';
+
+const stats = new Stats({ trackGPU: true });
+document.body.appendChild(stats.dom);
+
+const canvas = document.getElementById('canvas');
+const offscreen = canvas.transferControlToOffscreen();
+
+const worker = new Worker('worker.js', { type: 'module' });
+worker.postMessage({ type: 'init', canvas: offscreen }, [offscreen]);
+
+worker.onmessage = (e) => {
+  if (e.data.type === 'stats') {
+    stats.setData(e.data);
+  }
+};
+
+function loop() {
+  stats.update();
+  requestAnimationFrame(loop);
+}
+loop();
+```
+
+### StatsProfiler API
+
+`StatsProfiler` is a headless version of `Stats` designed for workers:
+
+- `init(canvas | device)` - Initialize with WebGL context, OffscreenCanvas, or GPUDevice
+- `begin()` / `end(encoder?)` - Wrap your render calls (pass encoder for native WebGPU)
+- `getTimestampWrites()` - Get timestampWrites config for native WebGPU render pass
+- `update()` - Process timing data
+- `getData()` - Returns `{ fps, cpu, gpu, gpuCompute }`
+- `captureTexture(source, sourceId)` - Capture texture to ImageBitmap for transfer
+
+### Stats.setData()
+
+Use `stats.setData(data)` to feed external timing data into the Stats UI. When set, `update()` uses this data instead of internal timing.
+
+## Texture Preview Panels
+
+Display render target previews alongside performance metrics. Supports both WebGL and WebGPU.
+
+### Three.js Usage
+
+```js
+const stats = new Stats({ trackGPU: true });
+stats.init(renderer);
+
+// Create a texture panel
+const panel = stats.addTexturePanel('GBuffer');
+
+// Set texture source (WebGLRenderTarget or WebGPU RenderTarget)
+const renderTarget = new THREE.WebGLRenderTarget(width, height);
+stats.setTexture('GBuffer', renderTarget);
+
+// In render loop - textures update automatically
+function animate() {
+  renderer.setRenderTarget(renderTarget);
+  renderer.render(scene, camera);
+  renderer.setRenderTarget(null);
+  renderer.render(scene, camera);
+  stats.update();
+}
+```
+
+### Worker Texture Transfer
+
+```js
+// Worker - capture and transfer texture
+const bitmap = await profiler.captureTexture(renderTarget, 'gbuffer');
+self.postMessage(
+  { type: 'texture', name: 'GBuffer', bitmap, width, height },
+  [bitmap]
+);
+
+// Main thread - receive and display
+worker.onmessage = (e) => {
+  if (e.data.type === 'texture') {
+    stats.setTextureBitmap(e.data.name, e.data.bitmap, e.data.width, e.data.height);
+  }
+};
+```
+
+### Texture Panel API
+
+- `stats.addTexturePanel(name)` - Create a new texture preview panel
+- `stats.setTexture(name, source)` - Set Three.js RenderTarget source
+- `stats.setTextureWebGL(name, framebuffer, width, height)` - Set raw WebGL framebuffer
+- `stats.setTextureBitmap(name, bitmap, width?, height?)` - Set ImageBitmap (for workers)
+- `stats.removeTexturePanel(name)` - Remove a texture panel
+
+## Custom Panels
+
+Add custom metrics panels:
+
+```js
+const customPanel = stats.addPanel(new Stats.Panel('COUNT', '#ff0', '#220'));
+
+function animate() {
+  // Update with value and max
+  customPanel.update(currentValue, maxValue, 2); // 2 decimal places
+  customPanel.updateGraph(currentValue, maxValue);
+  stats.update();
+}
+```
+
+## API Reference
+
+### Default Export: Stats
+
+Main class with DOM rendering.
+
+```js
+import Stats from 'stats-gl';
+
+const stats = new Stats(options);
+stats.init(renderer);           // Initialize with Three.js renderer, canvas, or GPUDevice
+stats.begin();                  // Start timing (auto-called for Three.js)
+stats.end(encoder?);            // End timing (pass encoder for native WebGPU)
+stats.update();                 // Update display
+stats.setData(data);            // Set external timing data
+stats.getTimestampWrites();     // Get timestampWrites for native WebGPU render pass
+stats.dispose();                // Clean up resources
+```
+
+### Named Exports
+
+```js
+import Stats, {
+  StatsProfiler,           // Headless profiler for workers
+  PanelTexture,            // Texture preview panel class
+  TextureCaptureWebGL,     // WebGL texture capture utility
+  TextureCaptureWebGPU,    // WebGPU texture capture utility
+  StatsGLCapture           // Addon capture helper
+} from 'stats-gl';
+```
+
+## Contributing
+
+Contributions to stats-gl are welcome. Please report any issues or bugs you encounter.
+
+## License
+
 This project is licensed under the MIT License.
 
-## 🧑‍🎨 Maintainers :
+## Maintainers
 
-- [`twitter 🐈‍⬛ @onirenaud`](https://twitter.com/onirenaud)
-- [`twitter @utsuboco`](https://twitter.com/utsuboco)
+- [@onirenaud](https://twitter.com/onirenaud)
+- [@utsuboco](https://twitter.com/utsuboco)

@@ -1,0 +1,266 @@
+# stats-gl - WebGL/WebGPU Performance Monitor
+
+Real-time FPS, CPU, GPU timing for Three.js, native WebGL2/WebGPU, and Web Workers.
+
+## Install
+
+```bash
+npm install stats-gl
+```
+
+## 1. Three.js (WebGL)
+
+```js
+import Stats from 'stats-gl';
+import * as THREE from 'three';
+
+const stats = new Stats({ trackGPU: true });
+document.body.appendChild(stats.dom);
+
+const renderer = new THREE.WebGLRenderer();
+stats.init(renderer);
+
+function animate() {
+  renderer.render(scene, camera);
+  stats.update();
+}
+renderer.setAnimationLoop(animate);
+```
+
+## 2. Three.js (WebGPU)
+
+```js
+import Stats from 'stats-gl';
+import * as THREE from 'three';
+
+const stats = new Stats({ trackGPU: true, trackCPT: true });
+document.body.appendChild(stats.dom);
+
+const renderer = new THREE.WebGPURenderer();
+stats.init(renderer);
+
+async function animate() {
+  await renderer.renderAsync(scene, camera);
+  stats.update();
+}
+renderer.setAnimationLoop(animate);
+```
+
+## 3. Native WebGL2
+
+```js
+import Stats from 'stats-gl';
+
+const stats = new Stats({ trackGPU: true });
+const canvas = document.querySelector('#canvas');
+stats.init(canvas);
+document.body.appendChild(stats.dom);
+
+function animate() {
+  stats.begin();
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  stats.end();
+  stats.update();
+  requestAnimationFrame(animate);
+}
+animate();
+```
+
+## 4. Native WebGPU
+
+```js
+import Stats from 'stats-gl';
+
+const adapter = await navigator.gpu.requestAdapter();
+const device = await adapter.requestDevice({
+  requiredFeatures: ['timestamp-query']
+});
+const context = canvas.getContext('webgpu');
+
+const stats = new Stats({ trackGPU: true });
+stats.init(device); // Pass GPUDevice
+document.body.appendChild(stats.dom);
+
+function animate() {
+  stats.begin();
+
+  const encoder = device.createCommandEncoder();
+  const pass = encoder.beginRenderPass({
+    colorAttachments: [...],
+    timestampWrites: stats.getTimestampWrites() // GPU timing
+  });
+  // ... draw calls ...
+  pass.end();
+
+  stats.end(encoder); // Resolve timestamps
+  device.queue.submit([encoder.finish()]);
+
+  stats.update();
+  requestAnimationFrame(animate);
+}
+animate();
+```
+
+## 5. Web Worker + OffscreenCanvas
+
+### Main Thread
+
+```js
+import Stats from 'stats-gl';
+
+const stats = new Stats({ trackGPU: true });
+document.body.appendChild(stats.dom);
+
+const canvas = document.getElementById('canvas');
+const offscreen = canvas.transferControlToOffscreen();
+
+const worker = new Worker('worker.js', { type: 'module' });
+worker.postMessage({ type: 'init', canvas: offscreen }, [offscreen]);
+
+worker.onmessage = (e) => {
+  if (e.data.type === 'stats') {
+    stats.setData(e.data);
+  }
+};
+
+function loop() {
+  stats.update();
+  requestAnimationFrame(loop);
+}
+loop();
+```
+
+### Worker
+
+```js
+import { StatsProfiler } from 'stats-gl';
+
+const profiler = new StatsProfiler({ trackGPU: true });
+
+self.onmessage = async (e) => {
+  if (e.data.type === 'init') {
+    const gl = e.data.canvas.getContext('webgl2');
+    await profiler.init(gl);
+    requestAnimationFrame(loop);
+  }
+};
+
+function loop() {
+  profiler.begin();
+  // render...
+  profiler.end();
+  profiler.update();
+  self.postMessage({ type: 'stats', ...profiler.getData() });
+  requestAnimationFrame(loop);
+}
+```
+
+## 6. Texture Preview Panels
+
+```js
+import Stats from 'stats-gl';
+
+const stats = new Stats({ trackGPU: true });
+stats.init(renderer);
+
+// Add texture panel
+stats.addTexturePanel('GBuffer');
+
+// Set source (Three.js RenderTarget)
+const rt = new THREE.WebGLRenderTarget(1024, 1024);
+stats.setTexture('GBuffer', rt);
+
+// In animate - auto-updates at graphsPerSecond rate
+function animate() {
+  renderer.setRenderTarget(rt);
+  renderer.render(scene, camera);
+  renderer.setRenderTarget(null);
+  renderer.render(scene, camera);
+  stats.update();
+}
+```
+
+## 7. Worker Texture Transfer
+
+### Worker
+
+```js
+const bitmap = await profiler.captureTexture(renderTarget, 'gbuffer');
+self.postMessage(
+  { type: 'texture', name: 'GBuffer', bitmap, width: 1024, height: 1024 },
+  [bitmap]
+);
+```
+
+### Main Thread
+
+```js
+stats.addTexturePanel('GBuffer');
+
+worker.onmessage = (e) => {
+  if (e.data.type === 'texture') {
+    stats.setTextureBitmap(e.data.name, e.data.bitmap, e.data.width, e.data.height);
+  }
+};
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| trackFPS | true | FPS/CPU panels |
+| trackGPU | false | GPU timing |
+| trackHz | false | Refresh rate |
+| trackCPT | false | Compute timing (WebGPU) |
+| logsPerSecond | 4 | Text update rate |
+| graphsPerSecond | 30 | Graph update rate |
+| samplesLog | 40 | Text averaging samples |
+| samplesGraph | 10 | Graph averaging samples |
+| precision | 2 | Decimal places |
+| minimal | false | Click-to-cycle mode |
+| horizontal | true | Panel layout |
+| mode | 0 | Initial panel |
+
+## API
+
+### Stats (default export)
+
+```js
+stats.init(renderer)              // Init with Three.js renderer, canvas, or GPUDevice
+stats.begin()                     // Start timing
+stats.end(encoder?)               // End timing (pass encoder for native WebGPU)
+stats.update()                    // Update display
+stats.getTimestampWrites()        // Get timestampWrites for native WebGPU render pass
+stats.setData({ fps, cpu, gpu })  // External data (workers)
+stats.addPanel(panel)             // Custom panel
+stats.addTexturePanel(name)       // Texture preview
+stats.setTexture(name, target)    // Set texture source
+stats.setTextureBitmap(name, bmp) // Set ImageBitmap
+stats.dispose()                   // Cleanup
+```
+
+### StatsProfiler (headless for workers)
+
+```js
+profiler.init(gl | device)        // Init with GL context or GPUDevice
+profiler.begin()                  // Start timing
+profiler.end(encoder?)            // End timing (pass encoder for native WebGPU)
+profiler.update()                 // Process data
+profiler.getTimestampWrites()     // Get timestampWrites for native WebGPU
+profiler.getData()                // { fps, cpu, gpu, gpuCompute }
+profiler.captureTexture(src, id)  // Capture to ImageBitmap
+profiler.dispose()                // Cleanup
+```
+
+### Exports
+
+```js
+import Stats, {
+  StatsProfiler,
+  PanelTexture,
+  TextureCaptureWebGL,
+  TextureCaptureWebGPU,
+  StatsGLCapture
+} from 'stats-gl';
+```

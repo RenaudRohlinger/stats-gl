@@ -105,7 +105,7 @@ class Panel {
     }
 
     // Update only text portion
-    public update(value: number, maxValue: number, decimals: number = 0) {
+    public update(value: number, maxValue: number, decimals: number = 0, suffix: string = '') {
         if (!this.context || !this.gradient) return;
 
         const min = Math.min(Infinity, value);
@@ -116,11 +116,25 @@ class Panel {
         this.context.fillStyle = this.bg;
         this.context.fillRect(0, 0, this.WIDTH, this.GRAPH_Y);
 
-        // Draw text
+        // Draw value and name
+        const valueAndName = `${value.toFixed(decimals)} ${this.name}`;
+        this.context.fillStyle = this.fg;
+        this.context.fillText(valueAndName, this.TEXT_X, this.TEXT_Y);
+
+        let textX = this.TEXT_X + this.context.measureText(valueAndName).width;
+
+        // Draw suffix in orange if present
+        if (suffix) {
+            this.context.fillStyle = '#f90';
+            this.context.fillText(suffix, textX, this.TEXT_Y);
+            textX += this.context.measureText(suffix).width;
+        }
+
+        // Draw range
         this.context.fillStyle = this.fg;
         this.context.fillText(
-            `${value.toFixed(decimals)} ${this.name} (${min.toFixed(decimals)}-${parseFloat(max.toFixed(decimals))})`,
-            this.TEXT_X,
+            ` (${min.toFixed(decimals)}-${parseFloat(max.toFixed(decimals))})`,
+            textX,
             this.TEXT_Y
         );
     }

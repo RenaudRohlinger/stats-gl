@@ -4,7 +4,6 @@ const entries = ['./lib/main.ts'];
 
 export default defineConfig({
   optimizeDeps: {
-    include: ['three'], // optionally specify dependency name
     esbuildOptions: {
       supported: {
         'top-level-await': true,
@@ -12,14 +11,6 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      'three/ShaderChunk': 'three/examples/jsm/shaders/ShaderChunk',
-      'three/UniformsLib': 'three/examples/jsm/shaders/UniformsLib',
-      'three/webgpu': 'three',
-      'three/addons': 'three/examples/jsm',
-      'three/tsl': 'three/webgpu',
-      three: 'three/webgpu',
-    },
   },
   build: {
     minify: false,
