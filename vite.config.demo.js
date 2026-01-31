@@ -1,16 +1,8 @@
-import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import { defineConfig } from 'vite';
 
 export default defineConfig({
   publicDir: 'public',
-  resolve: {
-    alias: {
-      'three/tsl': 'https://unpkg.com/three@0.182.0/build/three.tsl.js',
-      'three/webgpu': 'https://unpkg.com/three@0.182.0/build/three.webgpu.js',
-      'three/addons/': 'https://unpkg.com/three@0.182.0/examples/jsm/',
-      'three': 'https://unpkg.com/three@0.182.0/build/three.webgpu.js',
-    },
-  },
   build: {
     outDir: 'dist-demo',
     emptyOutDir: true,

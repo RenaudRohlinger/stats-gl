@@ -6,6 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0" />
     <title>Stats-GL - demo</title>
+    <link rel="help" href="/llms.txt" type="text/plain" title="LLM Instructions">
     <style>
       body,
       canvas,
@@ -139,8 +140,9 @@
         }
       }
     </script>
-    <script type="module" crossorigin src="/assets/main-c028a25c.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/main-a231d0d0.js">
+    <script type="module" crossorigin src="/assets/main-56457e0d.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/main-ed40d92b.js">
+    <link rel="modulepreload" crossorigin href="/assets/three.core-e03207ca.js">
   </head>
   <body>
     <div id="container"></div>
@@ -185,19 +187,23 @@
         <a href="/worker_tsl.html" class="nav-tab">Worker TSL</a>
       </div>
       <pre>
-<span class="comment">// Threejs example</span>
+<span class="comment">// Threejs example with Texture Panel</span>
 
 <span class="keyword">import</span> Stats <span class="keyword">from</span> <span class="string">'stats-gl'</span>
 
 <span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true });
-<span class="keyword">const</span> renderer = <span class="keyword">new</span> THREE.WebGPURenderer();
 stats.init( renderer );
-container.appendChild( stats.dom );
+stats.addTexturePanel(<span class="string">'RT'</span>);
+
+<span class="comment">// Create render target</span>
+<span class="keyword">const</span> rt = <span class="keyword">new</span> THREE.RenderTarget(w, h);
 
 <span class="keyword">function</span> animate() {
+    renderer.setRenderTarget(rt);
     renderer.render( scene, camera );
-    renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER );
-    renderer.resolveTimestampsAsync( THREE.TimestampQuery.COMPUTE );
+    renderer.setRenderTarget(<span class="keyword">null</span>);
+    renderer.render( scene, camera );
+    stats.setTexture(<span class="string">'RT'</span>, rt);
     stats.update();
 };</pre>
     </div>

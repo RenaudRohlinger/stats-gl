@@ -1,6 +1,6 @@
 {
   "name": "stats-gl",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "type": "module",
   "author": "Renaud ROHLINGER (https://github.com/RenaudRohlinger)",
   "homepage": "https://github.com/RenaudRohlinger/stats-gl",
@@ -9,8 +9,10 @@
   "files": [
     "dist/*",
     "lib/*",
-    "addons/*"
+    "addons/*",
+    "llms.txt"
   ],
+  "llms": "./llms.txt",
   "types": "./dist/stats-gl.d.ts",
   "main": "./dist/main.cjs",
   "module": "./dist/main.js",
@@ -32,13 +34,14 @@
     "preview:demo": "vite preview --outDir dist-demo"
   },
   "devDependencies": {
+    "@types/three": "*",
     "fs-extra": "^11.2.0",
     "path": "^0.12.7",
     "rollup": "^4.24.3",
     "rollup-plugin-dts": "^5.3.1",
+    "three": "^0.182.0",
     "typescript": "^5.6.3",
-    "vite": "^4.5.5",
-    "@types/three": "*"
+    "vite": "^4.5.5"
   },
   "peerDependencies": {
     "three": "*"

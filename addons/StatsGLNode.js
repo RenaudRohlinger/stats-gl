@@ -1,24 +1,28 @@
 /**
  * StatsGLNode - TSL Node capture for stats-gl (WebGPU only)
+ * Works in both main thread and Web Workers.
  *
- * Usage:
+ * Main Thread Usage:
  *   import { statsGL } from 'stats-gl/addons/StatsGLNode.js';
- *   import { addMethodChaining } from 'three/tsl';
- *
- *   addMethodChaining('toStatsGL', statsGL);
- *
- *   // Simple capture:
  *   someNode.toStatsGL('Name', stats);
  *
- *   // With callback for transformed capture:
- *   depthNode.toStatsGL('Depth', stats, () => linearDepthNode);
+ * Worker Usage:
+ *   import { flushCaptures } from 'stats-gl/addons/StatsGLNode.js';
+ *   someNode.toStatsGL('Name');  // No stats needed in worker
+ *   const captures = await flushCaptures(renderer);
+ *   for (const { name, bitmap } of captures) {
+ *     self.postMessage({ type: 'texture', name, bitmap }, [bitmap]);
+ *   }
  */
 
 import { addMethodChaining, nodeObject, vec3, vec4 } from 'three/tsl';
 import { CanvasTarget, LinearSRGBColorSpace, NodeMaterial, NoToneMapping, QuadMesh, RendererUtils } from 'three/webgpu';
 
+// Detect worker environment
+const isWorker = typeof document === 'undefined';
+
 /**
- * Capture data stored on stats instance
+ * Capture data for TSL node rendering
  */
 class CaptureData {
   constructor(name, node, stats, callback) {
@@ -45,19 +49,21 @@ class CaptureData {
       }
       captureNode = nodeObject(captureNode);
 
-      // Create canvas
-      this.canvas = document.createElement('canvas');
-      this.canvas.width = this.canvas.height = this.size;
+      // Create canvas (OffscreenCanvas in workers, regular canvas in main thread)
+      if (isWorker) {
+        this.canvas = new OffscreenCanvas(this.size, this.size);
+      } else {
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = this.canvas.height = this.size;
+      }
 
-      // Create canvas target (must set pixelRatio before size)
+      // Create canvas target
       this.canvasTarget = new CanvasTarget(this.canvas);
-      this.canvasTarget.setPixelRatio(window.devicePixelRatio);
-      this.canvasTarget.setSize(this.size, this.size);
+      this.canvasTarget.setPixelRatio(isWorker ? 1 : (window.devicePixelRatio || 1));
+      this.canvasTarget.setSize(this.size, this.size, false);
 
       // Create material - use vec4(vec3(node), 1) like Inspector does
-      // For testing: use vec4(1, 0, 0, 1) for red
       let output = vec4(vec3(captureNode), 1);
-      // Mark as inspector context
       output = output.context({ inspector: true });
 
       this.material = new NodeMaterial();
@@ -65,8 +71,8 @@ class CaptureData {
 
       this.quad = new QuadMesh(this.material);
 
-      // Create panel if not exists
-      if (!this.stats.texturePanels.has(this.name)) {
+      // Create panel if not in worker and stats is provided
+      if (!isWorker && this.stats && !this.stats.texturePanels.has(this.name)) {
         this.stats.addTexturePanel(this.name);
       }
 
@@ -79,10 +85,10 @@ class CaptureData {
   }
 
   async capture(renderer) {
-    if (!this.initialized && !this.init(renderer)) return;
+    if (!this.initialized && !this.init(renderer)) return null;
 
     try {
-      // Save renderer state (like Inspector's Viewer does)
+      // Save renderer state
       const previousCanvasTarget = renderer.getCanvasTarget();
       const state = RendererUtils.resetRendererState(renderer);
 
@@ -102,12 +108,21 @@ class CaptureData {
 
       // Create bitmap from canvas
       const bitmap = await createImageBitmap(this.canvas);
-      const panel = this.stats.texturePanels.get(this.name);
-      if (panel) {
-        panel.updateTexture(bitmap);
+
+      // In main thread with stats, update panel directly
+      if (!isWorker && this.stats) {
+        const panel = this.stats.texturePanels.get(this.name);
+        if (panel) {
+          panel.updateTexture(bitmap);
+        }
+        return null; // Panel updated directly
       }
+
+      // In worker or without stats, return bitmap
+      return bitmap;
     } catch (e) {
       console.warn('StatsGL: Failed to capture for', this.name, e);
+      return null;
     }
   }
 
@@ -115,7 +130,7 @@ class CaptureData {
     if (this.material && this.material.dispose) {
       this.material.dispose();
     }
-    if (this.canvas && this.canvas.parentNode) {
+    if (!isWorker && this.canvas && this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
     }
     this.canvas = null;
@@ -126,35 +141,41 @@ class CaptureData {
   }
 }
 
+// Global registry for worker captures (when no stats instance)
+const globalCaptures = new Map();
+
 /**
  * Register a TSL node for capture. Returns the original node unchanged.
- * Capture happens in stats.update() after the main render.
  *
  * @param {Node} node - The node to capture
  * @param {string} name - Panel name/label
- * @param {Stats} stats - Stats instance (must have called stats.init(renderer))
+ * @param {Stats|null} [stats=null] - Stats instance (optional in workers)
  * @param {Function|null} [callback=null] - Optional callback to transform the node for capture
  * @returns {Node} The original node (passthrough)
  */
-export function statsGL(node, name, stats, callback = null) {
+export function statsGL(node, name, stats = null, callback = null) {
   node = nodeObject(node);
 
-  // Create capture data
   const captureData = new CaptureData(name, node, stats, callback);
 
-  // Register with stats
-  if (!stats._statsGLCaptures) {
-    stats._statsGLCaptures = new Map();
+  if (stats) {
+    // Main thread with stats - register on stats instance
+    if (!stats._statsGLCaptures) {
+      stats._statsGLCaptures = new Map();
+    }
+    stats._statsGLCaptures.set(name, captureData);
+  } else {
+    // Worker or no stats - use global registry
+    globalCaptures.set(name, captureData);
   }
-  stats._statsGLCaptures.set(name, captureData);
 
-  // Return original node unchanged - this is a side effect only
   return node;
 }
 
 /**
- * Call this in stats.update() to capture all registered nodes.
- * The renderer must be passed from stats.init().
+ * Capture all registered nodes and update panels (main thread with stats).
+ * @param {Stats} stats - Stats instance
+ * @param {WebGPURenderer} renderer - The renderer
  */
 export function captureStatsGLNodes(stats, renderer) {
   const captures = stats._statsGLCaptures;
@@ -166,12 +187,30 @@ export function captureStatsGLNodes(stats, renderer) {
 }
 
 /**
- * Remove a registered TSL node capture
- * @param {Stats} stats - Stats instance
+ * Flush all captures and return ImageBitmaps (for workers or manual handling).
+ * @param {WebGPURenderer} renderer - The renderer
+ * @returns {Promise<Array<{name: string, bitmap: ImageBitmap}>>}
+ */
+export async function flushCaptures(renderer) {
+  const results = [];
+
+  for (const [name, captureData] of globalCaptures) {
+    const bitmap = await captureData.capture(renderer);
+    if (bitmap) {
+      results.push({ name, bitmap });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Remove a registered capture
+ * @param {Stats|null} stats - Stats instance (null for global/worker captures)
  * @param {string} name - Name of the capture to remove
  */
 export function removeStatsGL(stats, name) {
-  const captures = stats._statsGLCaptures;
+  const captures = stats ? stats._statsGLCaptures : globalCaptures;
   if (!captures) return;
 
   const captureData = captures.get(name);
@@ -182,11 +221,11 @@ export function removeStatsGL(stats, name) {
 }
 
 /**
- * Dispose all registered TSL node captures
- * @param {Stats} stats - Stats instance
+ * Dispose all registered captures
+ * @param {Stats|null} stats - Stats instance (null for global/worker captures)
  */
 export function disposeStatsGLCaptures(stats) {
-  const captures = stats._statsGLCaptures;
+  const captures = stats ? stats._statsGLCaptures : globalCaptures;
   if (!captures) return;
 
   for (const captureData of captures.values()) {
@@ -195,7 +234,15 @@ export function disposeStatsGLCaptures(stats) {
   captures.clear();
 }
 
+/**
+ * Get list of registered capture names
+ * @param {Stats|null} stats - Stats instance (null for global/worker captures)
+ * @returns {string[]}
+ */
+export function getCaptureNames(stats) {
+  const captures = stats ? stats._statsGLCaptures : globalCaptures;
+  return captures ? Array.from(captures.keys()) : [];
+}
 
-
-// User sets up chaining for TSL nodes
+// Register method chaining for TSL nodes
 addMethodChaining('toStatsGL', statsGL);

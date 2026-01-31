@@ -6,6 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0" />
     <title>Stats-GL - demo</title>
+    <link rel="help" href="/llms.txt" type="text/plain" title="LLM Instructions">
     <style>
       body,
       canvas,
@@ -173,19 +174,23 @@
         <a href="/worker_tsl.html" class="nav-tab">Worker TSL</a>
       </div>
       <pre>
-<span class="comment">// Threejs example</span>
+<span class="comment">// Threejs example with Texture Panel</span>
 
 <span class="keyword">import</span> Stats <span class="keyword">from</span> <span class="string">'stats-gl'</span>
 
 <span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true });
-<span class="keyword">const</span> renderer = <span class="keyword">new</span> THREE.WebGPURenderer();
 stats.init( renderer );
-container.appendChild( stats.dom );
+stats.addTexturePanel(<span class="string">'RT'</span>);
+
+<span class="comment">// Create render target</span>
+<span class="keyword">const</span> rt = <span class="keyword">new</span> THREE.RenderTarget(w, h);
 
 <span class="keyword">function</span> animate() {
+    renderer.setRenderTarget(rt);
     renderer.render( scene, camera );
-    renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER );
-    renderer.resolveTimestampsAsync( THREE.TimestampQuery.COMPUTE );
+    renderer.setRenderTarget(<span class="keyword">null</span>);
+    renderer.render( scene, camera );
+    stats.setTexture(<span class="string">'RT'</span>, rt);
     stats.update();
 };</pre>
     </div>
@@ -257,6 +262,9 @@ container.appendChild( stats.dom );
       });
       container.appendChild(stats.dom);
 
+      // Create texture panel for render target preview
+      stats.addTexturePanel('RT');
+
       // const survivorsPanel = stats.addPanel(
       //   new Stats.Panel('COUNT', 'rgba(172, 37, 255, 1)', '#002')
       // );
@@ -267,6 +275,12 @@ container.appendChild( stats.dom );
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
+
+      // Create render target for texture panel preview
+      let renderTarget = new THREE.RenderTarget(
+        window.innerWidth * window.devicePixelRatio,
+        window.innerHeight * window.devicePixelRatio
+      );
 
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0xbfe3dd);
@@ -290,7 +304,7 @@ container.appendChild( stats.dom );
       scene.add(light);
       const loader = new GLTFLoader();
       loader.load(
-        './demo/Flamingo.glb',
+        '/Flamingo.glb',
         function (gltf) {
           const model = gltf.scene;
           model.position.set(1, 1, 0);
@@ -315,6 +329,12 @@ container.appendChild( stats.dom );
         camera.updateProjectionMatrix();
 
         renderer.setSize(window.innerWidth, window.innerHeight);
+
+        // Resize render target
+        renderTarget.setSize(
+          window.innerWidth * window.devicePixelRatio,
+          window.innerHeight * window.devicePixelRatio
+        );
       };
 
       async function animate() {
@@ -324,14 +344,20 @@ container.appendChild( stats.dom );
 
         controls.update();
 
+        // Render to offscreen target for texture panel
+        renderer.setRenderTarget(renderTarget);
+        renderer.render(scene, camera);
+
+        // Render to screen
+        renderer.setRenderTarget(null);
         renderer.render(scene, camera);
         renderer.compute(compute);
 
-        // survivorsValue = (survivorsValue + delta * size * 0.25) % size;
-        // survivorsPanel.update(survivorsValue, size, 2);
-        // survivorsPanel.updateGraph(survivorsValue, size);
-        renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER )
-        renderer.resolveTimestampsAsync( THREE.TimestampQuery.COMPUTE )
+        // Update texture panel with render target
+        stats.setTexture('RT', renderTarget);
+
+        renderer.resolveTimestampsAsync(THREE.TimestampQuery.RENDER);
+        renderer.resolveTimestampsAsync(THREE.TimestampQuery.COMPUTE);
         stats.update();
       }
     </script>

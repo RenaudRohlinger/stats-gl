@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Stats-GL - Three.js MRT Worker Demo</title>
+    <link rel="help" href="/llms.txt" type="text/plain" title="LLM Instructions">
     <style>
       body,
       canvas,
@@ -288,6 +289,20 @@ depth.toStatsGL(<span class="string">'Depth'</span>);</pre>
         },
         [offscreen]
       );
+
+      // Handle worker errors
+      worker.onerror = (e) => {
+        console.error('Worker error:', e);
+        console.error('Worker error details:', {
+          message: e.message,
+          filename: e.filename,
+          lineno: e.lineno,
+          colno: e.colno,
+          error: e.error
+        });
+        statusEl.textContent = 'Worker Error: ' + (e.message || e.filename || 'Unknown error');
+        statusEl.style.color = '#f00';
+      };
 
       // Handle messages from worker
       worker.onmessage = (e) => {

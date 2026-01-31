@@ -21,7 +21,7 @@ class Panel {
         this.fg = fg;
         this.bg = bg;
         this.gradient = null;
-        this.PR = Math.round(window.devicePixelRatio || 1);
+        this.PR = Math.round(typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1);
 
         this.WIDTH = 90 * this.PR;
         this.HEIGHT = 48 * this.PR;
@@ -32,7 +32,9 @@ class Panel {
         this.GRAPH_WIDTH = 84 * this.PR;
         this.GRAPH_HEIGHT = 30 * this.PR;
 
-        this.canvas = document.createElement('canvas');
+        this.canvas = typeof document !== 'undefined'
+            ? document.createElement('canvas')
+            : new OffscreenCanvas(this.WIDTH, this.HEIGHT) as unknown as HTMLCanvasElement;
         this.canvas.width = this.WIDTH;
         this.canvas.height = this.HEIGHT;
         this.canvas.style.width = '90px';

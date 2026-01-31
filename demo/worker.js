@@ -32,12 +32,13 @@ let startTime = 0;
 let stressEnabled = false;
 
 // Heavy computation function (1M iterations)
+// Note: We assign to self to prevent tree-shaking
 function heavyComputation() {
   let result = 0;
   for (let i = 0; i < 1000000; i++) {
     result += Math.sqrt(i) * Math.sin(i);
   }
-  return result;
+  self.__stressResult = result;
 }
 
 function createShader(gl, type, source) {

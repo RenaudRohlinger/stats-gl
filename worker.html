@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Stats-GL - Worker Texture Demo</title>
+    <link rel="help" href="/llms.txt" type="text/plain" title="LLM Instructions">
     <style>
       body {
         margin: 0;
@@ -232,12 +233,13 @@ worker.onmessage = (e) => {
       let stressWorkerFlag = false;
 
       // Heavy computation function (1M iterations)
+      // Note: We assign to window to prevent tree-shaking
       function heavyComputation() {
         let result = 0;
         for (let i = 0; i < 1000000; i++) {
           result += Math.sqrt(i) * Math.sin(i);
         }
-        return result;
+        window.__stressResult = result;
       }
 
       // Stress buttons

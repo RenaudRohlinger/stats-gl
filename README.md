@@ -2,6 +2,8 @@
 [![Version](https://img.shields.io/npm/v/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
 [![Version](https://img.shields.io/npm/dw/stats-gl?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/stats-gl)
 
+> **For AI/LLM users:** See [llms.txt](./llms.txt) for a condensed API reference.
+
 WebGL/WebGPU Performance Monitor with real-time FPS, CPU, and GPU timing. Supports Three.js, native WebGL2/WebGPU, Web Workers, and texture preview panels.
 
 [Live Demo](https://stats.renaudrohlinger.com/)
@@ -300,15 +302,12 @@ scenePass.getLinearDepthNode().toStatsGL('Depth', stats);
 
 ### Web Worker Usage
 
-For OffscreenCanvas rendering in workers, use the worker addon:
+The same `StatsGLNode.js` addon works in Web Workers with OffscreenCanvas:
 
 **Worker:**
 ```js
 import { StatsProfiler } from 'stats-gl';
-import { statsGLWorker, flushCaptures } from 'stats-gl/addons/StatsGLNodeWorker.js';
-import { addMethodChaining } from 'three/tsl';
-
-addMethodChaining('toStatsGL', statsGLWorker);
+import { flushCaptures } from 'stats-gl/addons/StatsGLNode.js';
 
 const profiler = new StatsProfiler({ trackGPU: true });
 await profiler.init(renderer);
@@ -327,7 +326,7 @@ async function render() {
   // Send stats to main thread
   self.postMessage({ type: 'stats', data: profiler.getData() });
 
-  // Capture and transfer TSL nodes
+  // Capture and transfer TSL nodes as ImageBitmaps
   const captures = await flushCaptures(renderer);
   for (const { name, bitmap } of captures) {
     self.postMessage({ type: 'texture', name, bitmap }, [bitmap]);
@@ -408,9 +407,8 @@ import Stats, {
   StatsGLCapture           // Addon capture helper
 } from 'stats-gl';
 
-// TSL Node capture addons (WebGPU only)
-import { statsGL } from 'stats-gl/addons/StatsGLNode.js';
-import { statsGLWorker, flushCaptures } from 'stats-gl/addons/StatsGLNodeWorker.js';
+// TSL Node capture addon (WebGPU only, works in main thread and workers)
+import { statsGL, flushCaptures } from 'stats-gl/addons/StatsGLNode.js';
 ```
 
 ## Contributing

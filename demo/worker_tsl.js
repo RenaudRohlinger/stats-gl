@@ -10,11 +10,8 @@ self.onerror = function ( ev ) {
 	} );
 	// Forward to main thread since Worker error event may have limited info
 	self.postMessage( {
-		type: 'worker-error',
-		error: ev.error ? String( ev.error ) : String( ev ),
-		source: ev.filename,
-		lineno: ev.lineno,
-		colno: ev.colno,
+		type: 'error',
+		message: ev.error ? String( ev.error ) : ( ev.message || String( ev ) ),
 	} );
 
 };
@@ -24,9 +21,8 @@ self.onunhandledrejection = ( event ) => {
 	console.error( '[worker] ❌ Unhandled rejection:', event.reason );
 	// Forward to main thread
 	self.postMessage( {
-		type: 'worker-error',
-		error: String( event.reason ),
-		source: 'unhandled-rejection',
+		type: 'error',
+		message: String( event.reason ),
 	} );
 
 };
@@ -42,6 +38,7 @@ self.onunhandledrejection = ( event ) => {
  * - Stats profiling data sent to main thread
  */
 
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
   color,
   diffuseColor,
@@ -57,9 +54,8 @@ import {
   step
 } from 'three/tsl';
 import * as THREE from 'three/webgpu';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-import { flushCaptures } from '../addons/StatsGLNodeWorker.js';
+import { flushCaptures } from '../addons/StatsGLNode.js';
 import { StatsProfiler } from '../dist/main.js';
 
 let renderer = null;
@@ -76,7 +72,12 @@ let pendingCameraMatrix = null;
 self.onmessage = async (e) => {
   switch (e.data.type) {
     case 'init':
-      await init(e.data.canvas, e.data.width, e.data.height);
+      try {
+        await init(e.data.canvas, e.data.width, e.data.height);
+      } catch (error) {
+        console.error('Worker init failed:', error);
+        self.postMessage({ type: 'error', message: error.message || String(error) });
+      }
       break;
     case 'camera':
       pendingCameraMatrix = e.data.matrix;
@@ -88,6 +89,7 @@ self.onmessage = async (e) => {
 };
 
 async function init(canvas, width, height) {
+  console.log('[worker] init started');
   clock = new THREE.Clock();
 
   // Initialize WebGPU renderer with OffscreenCanvas
@@ -113,7 +115,9 @@ async function init(canvas, width, height) {
   scene.add(light);
 
   // Initialize renderer (required for WebGPU)
+  console.log('[worker] calling renderer.init()...');
   await renderer.init();
+  console.log('[worker] renderer.init() complete');
 
   // Initialize profiler
   profiler = new StatsProfiler({ trackGPU: true });
@@ -167,10 +171,12 @@ async function init(canvas, width, height) {
   })();
 
   // Load model
+  console.log('[worker] loading model...');
   const loader = new GLTFLoader();
   loader.load(
     '/Flamingo.glb',
     (gltf) => {
+      console.log('[worker] model loaded');
       const model = gltf.scene;
       model.position.set(1, 1, 0);
       model.scale.set(0.025, 0.025, 0.025);
@@ -244,7 +250,7 @@ async function render() {
         width: renderer.domElement.width,
         height: renderer.domElement.height
       },
-      [bitmap] // Transfer bitmap for efficiency
+      [bitmap]
     );
   }
 }
