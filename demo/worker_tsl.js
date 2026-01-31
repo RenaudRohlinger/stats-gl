@@ -169,7 +169,7 @@ async function init(canvas, width, height) {
   // Load model
   const loader = new GLTFLoader();
   loader.load(
-    './Flamingo.glb',
+    '/Flamingo.glb',
     (gltf) => {
       const model = gltf.scene;
       model.position.set(1, 1, 0);

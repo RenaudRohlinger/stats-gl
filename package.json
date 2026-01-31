@@ -27,7 +27,9 @@
     "dev": "vite dev --debug",
     "serve": "vite serve",
     "build": "tsc && vite build && rollup -c && node ./scripts/copyBuild.js",
-    "preview": "vite preview"
+    "build:demo": "npm run build && vite build --config vite.config.demo.js",
+    "preview": "vite preview",
+    "preview:demo": "vite preview --outDir dist-demo"
   },
   "devDependencies": {
     "fs-extra": "^11.2.0",
