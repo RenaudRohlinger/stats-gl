@@ -1,3 +1,36 @@
+self.onerror = function ( ev ) {
+
+	console.error( '[worker] ❌ Global error:', {
+		message: ev.message,
+		filename: ev.filename,
+		lineno: ev.lineno,
+		colno: ev.colno,
+		error: ev.error,
+		event: ev
+	} );
+	// Forward to main thread since Worker error event may have limited info
+	self.postMessage( {
+		type: 'worker-error',
+		error: ev.error ? String( ev.error ) : String( ev ),
+		source: ev.filename,
+		lineno: ev.lineno,
+		colno: ev.colno,
+	} );
+
+};
+
+self.onunhandledrejection = ( event ) => {
+
+	console.error( '[worker] ❌ Unhandled rejection:', event.reason );
+	// Forward to main thread
+	self.postMessage( {
+		type: 'worker-error',
+		error: String( event.reason ),
+		source: 'unhandled-rejection',
+	} );
+
+};
+
 /**
  * MRT Worker - Three.js WebGPU rendering with PostProcessing in a Web Worker
  *
@@ -9,7 +42,6 @@
  * - Stats profiling data sent to main thread
  */
 
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
   color,
   diffuseColor,
@@ -25,6 +57,7 @@ import {
   step
 } from 'three/tsl';
 import * as THREE from 'three/webgpu';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 import { flushCaptures } from '../addons/StatsGLNodeWorker.js';
 import { StatsProfiler } from '../dist/main.js';
@@ -215,3 +248,5 @@ async function render() {
     );
   }
 }
+
+

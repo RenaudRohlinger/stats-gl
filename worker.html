@@ -198,7 +198,7 @@ worker.onmessage = (e) => {
     </div>
 
     <script type="module">
-      import Stats from './lib/main.ts';
+      import Stats from './dist/main.js';
 
       // Initialize stats (no canvas - worker handles rendering)
       const stats = new Stats({ trackGPU: true, trackHz: true });

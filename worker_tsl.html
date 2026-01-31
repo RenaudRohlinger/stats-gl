@@ -273,7 +273,10 @@ depth.toStatsGL(<span class="string">'Depth'</span>);</pre>
 
       // Transfer render canvas to worker
       const offscreen = renderCanvas.transferControlToOffscreen();
-      const worker = new Worker('./demo/worker_tsl.js', { type: 'module' });
+      const worker = new Worker(
+        new URL('./demo/worker_tsl.js', import.meta.url),
+        { type: 'module' }
+      );
 
       // Send init message with canvas
       worker.postMessage(
