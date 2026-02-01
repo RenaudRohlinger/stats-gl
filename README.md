@@ -111,7 +111,7 @@ const Scene = () => (
 
 ### Tresjs (Vue)
 
-A `<StatsGl />` component is available through [cientos](https://cientos.tresjs.org/guide/misc/stats-gl.html):
+A `<StatsGl />` component is available through [cientos](https://cientos.tresjs.org/api/debug-performance/stats-gl):
 
 ```vue
 <script setup lang="ts">
