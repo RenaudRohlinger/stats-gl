@@ -169,7 +169,7 @@ const _Stats = class _Stats2 {
   }
   begin() {
     if (!this.isRunningCPUProfiling) {
-      this.beginProfiling('cpu-started');
+      this.beginProfiling();
     }
     if (!this.gl || !this.ext) return;
     if (this.gl && this.ext) {
@@ -221,12 +221,12 @@ const _Stats = class _Stats2 {
       this.totalGpuDurationCompute = this.info.compute.timestamp;
       this.addToAverage(this.totalGpuDurationCompute, this.averageGpuCompute);
     }
-    this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
+    this.endProfiling();
     this.addToAverage(this.totalCpuDuration, this.averageCpu);
     this.addToAverage(this.totalGpuDuration, this.averageGpu);
     this.renderCount = 0;
     if (this.totalCpuDuration === 0) {
-      this.beginProfiling('cpu-started');
+      this.beginProfiling();
     }
     this.totalCpuDuration = 0;
     this.totalFps = 0;
@@ -261,21 +261,13 @@ const _Stats = class _Stats2 {
       averageArray.graph.shift();
     }
   }
-  beginProfiling(marker) {
-    if (window.performance) {
-      window.performance.mark(marker);
-      this.isRunningCPUProfiling = true;
-    }
+  beginProfiling() {
+    this.cpuStartTime = performance.now();
+    this.isRunningCPUProfiling = true;
   }
-  endProfiling(startMarker, endMarker, measureName) {
-    if (window.performance && endMarker && this.isRunningCPUProfiling) {
-      window.performance.mark(endMarker);
-      const cpuMeasure = performance.measure(
-        measureName,
-        startMarker,
-        endMarker
-      );
-      this.totalCpuDuration += cpuMeasure.duration;
+  endProfiling() {
+    if (this.isRunningCPUProfiling) {
+      this.totalCpuDuration += performance.now() - this.cpuStartTime;
       this.isRunningCPUProfiling = false;
     }
   }

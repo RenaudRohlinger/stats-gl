@@ -18,7 +18,7 @@ export class StatsProfiler extends StatsCore {
   }
 
   public update(): void {
-    this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
+    this.endProfiling();
 
     if (!this.info) {
       this.processGpuQueries();

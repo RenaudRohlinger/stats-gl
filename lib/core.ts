@@ -69,9 +69,11 @@ export class StatsCore {
   protected beginTime: number;
   protected prevCpuTime: number;
   protected frameTimes: number[] = [];
+  protected frameTimesHead = 0;
 
   protected renderCount = 0;
 
+  protected cpuStartTime = 0;
   protected totalCpuDuration = 0;
   protected totalGpuDuration = 0;
   protected totalGpuDurationCompute = 0;
@@ -267,7 +269,7 @@ export class StatsCore {
   }
 
   public begin(encoder?: GPUCommandEncoder): void {
-    this.beginProfiling('cpu-started');
+    this.beginProfiling();
 
     // For native WebGPU, timing is handled via timestampWrites in render pass
     if (this.webgpuNative) {
@@ -303,7 +305,7 @@ export class StatsCore {
         encoder.copyBufferToBuffer(this.gpuResolveBuffer, 0, writeBuffer, 0, 16);
       }
 
-      this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
+      this.endProfiling();
       return;
     }
 
@@ -313,7 +315,7 @@ export class StatsCore {
       this.activeQuery = null;
     }
 
-    this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
+    this.endProfiling();
   }
 
   /**
@@ -402,52 +404,31 @@ export class StatsCore {
     this.totalGpuDurationCompute = this.info!.compute.timestamp;
   }
 
-  protected beginProfiling(marker: string): void {
-    if (typeof performance !== 'undefined') {
-      try {
-        performance.clearMarks(marker);
-        performance.mark(marker);
-      } catch (error) {
-        console.debug('Stats: Performance marking failed:', error);
-      }
-    }
+  protected beginProfiling(): void {
+    this.cpuStartTime = performance.now();
   }
 
-  protected endProfiling(startMarker: string | PerformanceMeasureOptions | undefined, endMarker: string | undefined, measureName: string): void {
-    if (typeof performance === 'undefined' || !endMarker || !startMarker) return;
-
-    try {
-      const entries = performance.getEntriesByName(startMarker as string, 'mark');
-      if (entries.length === 0) {
-        this.beginProfiling(startMarker as string);
-      }
-
-      performance.clearMarks(endMarker);
-      performance.mark(endMarker);
-
-      performance.clearMeasures(measureName);
-
-      const cpuMeasure = performance.measure(measureName, startMarker, endMarker);
-      this.totalCpuDuration += cpuMeasure.duration;
-
-      performance.clearMarks(startMarker as string);
-      performance.clearMarks(endMarker);
-      performance.clearMeasures(measureName);
-    } catch (error) {
-      console.debug('Stats: Performance measurement failed:', error);
-    }
+  protected endProfiling(): void {
+    this.totalCpuDuration += performance.now() - this.cpuStartTime;
   }
 
   protected calculateFps(): number {
     const currentTime = performance.now();
+    const cutoff = currentTime - 1000;
 
     this.frameTimes.push(currentTime);
 
-    while (this.frameTimes.length > 0 && this.frameTimes[0] <= currentTime - 1000) {
-      this.frameTimes.shift();
+    while (this.frameTimesHead < this.frameTimes.length && this.frameTimes[this.frameTimesHead] <= cutoff) {
+      this.frameTimesHead++;
     }
 
-    return Math.round(this.frameTimes.length);
+    // Compact when head passes half the array to bound memory
+    if (this.frameTimesHead > 128) {
+      this.frameTimes = this.frameTimes.slice(this.frameTimesHead);
+      this.frameTimesHead = 0;
+    }
+
+    return Math.round(this.frameTimes.length - this.frameTimesHead);
   }
 
   protected updateAverages(): void {
@@ -495,7 +476,7 @@ export class StatsCore {
     const statsInstance = this;
 
     renderer.info.reset = function () {
-      statsInstance.beginProfiling('cpu-started');
+      statsInstance.beginProfiling();
       originalAnimationLoop.call(this);
     };
   }
@@ -567,6 +548,7 @@ export class StatsCore {
 
     // Clear arrays
     this.frameTimes.length = 0;
+    this.frameTimesHead = 0;
     this.averageFps.logs.length = 0;
     this.averageFps.graph.length = 0;
     this.averageCpu.logs.length = 0;

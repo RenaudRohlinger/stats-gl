@@ -282,7 +282,7 @@ class Stats extends StatsCore {
     const data = this.externalData!;
 
     // Track main thread CPU (measures from begin() call if user called it)
-    this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
+    this.endProfiling();
     this.addToAverage(this.totalCpuDuration, this.averageCpu);
     this.totalCpuDuration = 0;
 
@@ -299,7 +299,7 @@ class Stats extends StatsCore {
   }
 
   private updateFromInternalData(): void {
-    this.endProfiling('cpu-started', 'cpu-finished', 'cpu-duration');
+    this.endProfiling();
 
     if (this.webgpuNative) {
       // Native WebGPU: resolve timestamps async
