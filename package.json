@@ -1,6 +1,6 @@
 {
   "name": "stats-gl",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "type": "module",
   "author": "Renaud ROHLINGER (https://github.com/RenaudRohlinger)",
   "homepage": "https://github.com/RenaudRohlinger/stats-gl",
@@ -28,8 +28,9 @@
   "scripts": {
     "dev": "vite dev --debug",
     "serve": "vite serve",
-    "build": "tsc && vite build && rollup -c && node ./scripts/copyBuild.js",
-    "build:demo": "npm run build && vite build --config vite.config.demo.js",
+    "build": "tsc && vite build && rollup -c && bun ./scripts/copyBuild.js",
+    "test": "bun ./scripts/smoke.mjs",
+    "build:demo": "bun run build && vite build --config vite.config.demo.js",
     "preview": "vite preview",
     "preview:demo": "vite preview --outDir dist-demo"
   },
@@ -39,7 +40,7 @@
     "path": "^0.12.7",
     "rollup": "^4.24.3",
     "rollup-plugin-dts": "^5.3.1",
-    "three": "^0.182.0",
+    "three": "^0.184.0",
     "typescript": "^5.6.3",
     "vite": "^4.5.5"
   },

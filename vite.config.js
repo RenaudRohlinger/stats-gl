@@ -3,6 +3,11 @@ import { defineConfig } from 'vite';
 const entries = ['./lib/main.ts'];
 
 export default defineConfig({
+  server: {
+    // 6000 is browser-blocked (X11 on the fetch-spec bad-ports list -> ERR_UNSAFE_PORT)
+    port: 6001,
+    strictPort: true,
+  },
   optimizeDeps: {
     esbuildOptions: {
       supported: {

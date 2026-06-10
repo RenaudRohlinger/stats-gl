@@ -174,11 +174,12 @@
         <a href="/worker_tsl.html" class="nav-tab">Worker TSL</a>
       </div>
       <pre>
-<span class="comment">// Threejs example with Texture Panel</span>
+<span class="comment">// Threejs example with Texture + VRAM panels</span>
 
 <span class="keyword">import</span> Stats <span class="keyword">from</span> <span class="string">'stats-gl'</span>
 
-<span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true });
+<span class="comment">// VRAM reads renderer.info.memory (three r184+, hover for breakdown)</span>
+<span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true, trackVRAM: true });
 stats.init( renderer );
 stats.addTexturePanel(<span class="string">'RT'</span>);
 
@@ -191,7 +192,7 @@ stats.addTexturePanel(<span class="string">'RT'</span>);
     renderer.setRenderTarget(<span class="keyword">null</span>);
     renderer.render( scene, camera );
     stats.setTexture(<span class="string">'RT'</span>, rt);
-    stats.update();
+    stats.update(); <span class="comment">// GPU timestamps auto-resolve</span>
 };</pre>
     </div>
 
@@ -210,25 +211,19 @@ stats.addTexturePanel(<span class="string">'RT'</span>);
       >
     </div>
 
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://unpkg.com/three@0.182.0/build/three.webgpu.js",
-          "three/tsl": "https://unpkg.com/three@0.182.0/build/three.tsl.js",
-          "three/webgpu": "https://unpkg.com/three@0.182.0/build/three.webgpu.js",
-          "three/addons/": "https://unpkg.com/three@0.182.0/examples/jsm/"
-        }
-      }
-    </script>
-
     <script type="module">
+      // All three.js imports are bare specifiers resolved by Vite from
+      // node_modules - a single three instance for renderer AND loaders.
+      // (An unpkg import map here would split the page across two three
+      // copies, because Vite rewrites the inline script's bare imports.)
       import * as THREE from 'three/webgpu';
 
       import Stats from './dist/main.js';
       // import Stats from './lib/main.ts';
-      import { OrbitControls } from 'https://unpkg.com/three@0.182.0/examples/jsm/controls/OrbitControls.js';
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-      import { GLTFLoader } from 'https://unpkg.com/three@0.182.0/examples/jsm/loaders/GLTFLoader.js';
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+      import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
       import {
         instancedArray,
         instanceIndex,
@@ -251,7 +246,7 @@ stats.addTexturePanel(<span class="string">'RT'</span>);
       let mixer;
       let survivorsValue = 0;
 
-      const clock = new THREE.Clock();
+      const timer = new THREE.Timer();
       const container = document.getElementById('container');
 
       const stats = new Stats({
@@ -259,6 +254,7 @@ stats.addTexturePanel(<span class="string">'RT'</span>);
         trackGPU: true,
         trackCPT: false,
         trackHz: false,
+        trackVRAM: true,
       });
       container.appendChild(stats.dom);
 
@@ -302,13 +298,21 @@ stats.addTexturePanel(<span class="string">'RT'</span>);
       scene.add(new THREE.AmbientLight(0xf1f1ff, 1.5));
       const light = new THREE.DirectionalLight(0xffffff, 2);
       scene.add(light);
+
+      // LittlestTokyo: textured + draco-compressed, so the VRAM panel has
+      // something real to show (hover it for the per-category breakdown)
+      const dracoLoader = new DRACOLoader();
+      dracoLoader.setDecoderPath(
+        'https://unpkg.com/three@0.184.0/examples/jsm/libs/draco/gltf/'
+      );
       const loader = new GLTFLoader();
+      loader.setDRACOLoader(dracoLoader);
       loader.load(
-        '/Flamingo.glb',
+        '/LittlestTokyo.glb',
         function (gltf) {
           const model = gltf.scene;
           model.position.set(1, 1, 0);
-          model.scale.set(0.025, 0.025, 0.025);
+          model.scale.set(0.01, 0.01, 0.01);
           scene.add(model);
 
           mixer = new THREE.AnimationMixer(model);
@@ -338,7 +342,8 @@ stats.addTexturePanel(<span class="string">'RT'</span>);
       };
 
       async function animate() {
-        const delta = clock.getDelta();
+        timer.update();
+        const delta = timer.getDelta();
 
         mixer.update(delta);
 
@@ -356,8 +361,7 @@ stats.addTexturePanel(<span class="string">'RT'</span>);
         // Update texture panel with render target
         stats.setTexture('RT', renderTarget);
 
-        renderer.resolveTimestampsAsync(THREE.TimestampQuery.RENDER);
-        renderer.resolveTimestampsAsync(THREE.TimestampQuery.COMPUTE);
+        // GPU timestamps resolve automatically inside stats.update()
         stats.update();
       }
     </script>

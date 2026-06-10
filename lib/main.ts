@@ -1,6 +1,7 @@
-import { StatsCore, StatsCoreOptions, StatsData, AverageData } from './core';
+import { StatsCore, StatsCoreOptions, StatsData, AverageData, BYTES_TO_MB } from './core';
 import { Panel } from './panel';
 import { PanelVSync } from './panelVsync';
+import { PanelMemory } from './panelMemory';
 import { PanelTexture } from './panelTexture';
 import {
   TextureCaptureWebGL,
@@ -16,6 +17,7 @@ interface StatsOptions extends StatsCoreOptions {
   minimal?: boolean;
   horizontal?: boolean;
   mode?: number;
+  texturesPerSecond?: number;
 }
 
 interface VSyncInfo {
@@ -23,19 +25,39 @@ interface VSyncInfo {
   frameTime: number;
 }
 
+function maxOf(values: number[]): number {
+  let max = -Infinity;
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] > max) max = values[i];
+  }
+  return max;
+}
+
+function minOf(values: number[]): number {
+  let min = Infinity;
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] < min) min = values[i];
+  }
+  return min;
+}
+
 class Stats extends StatsCore {
   public dom: HTMLDivElement;
   public mode: number;
   public horizontal: boolean;
   public minimal: boolean;
+  public texturesPerSecond: number;
 
-  private _panelId: number;
+  /** Metric panels in display order (ids match array index) */
+  public panels: Panel[] = [];
   private fpsPanel: Panel | null = null;
   private msPanel: Panel | null = null;
   private gpuPanel: Panel | null = null;
   private gpuPanelCompute: Panel | null = null;
+  private vramPanel: PanelMemory | null = null;
   private vsyncPanel: PanelVSync | null = null;
   private workerCpuPanel: Panel | null = null;
+  private vramMaxSeen = 0;
 
   // Texture panel support
   public texturePanels: Map<string, PanelTexture> = new Map();
@@ -49,25 +71,31 @@ class Stats extends StatsCore {
   private lastRendererWidth = 0;
   private lastRendererHeight = 0;
   private textureUpdatePending = false;
-
-  private updateCounter = 0;
-  private lastMin: { [key: string]: number } = {};
-  private lastMax: { [key: string]: number } = {};
-  private lastValue: { [key: string]: number } = {};
+  private prevTextureTime: number;
 
   private readonly VSYNC_RATES: VSyncInfo[] = [
+    { refreshRate: 30, frameTime: 33.33 },
+    { refreshRate: 50, frameTime: 20.0 },
     { refreshRate: 60, frameTime: 16.67 },
     { refreshRate: 75, frameTime: 13.33 },
     { refreshRate: 90, frameTime: 11.11 },
     { refreshRate: 120, frameTime: 8.33 },
     { refreshRate: 144, frameTime: 6.94 },
     { refreshRate: 165, frameTime: 6.06 },
-    { refreshRate: 240, frameTime: 4.17 }
+    { refreshRate: 240, frameTime: 4.17 },
+    { refreshRate: 360, frameTime: 2.78 },
+    { refreshRate: 480, frameTime: 2.08 }
   ];
   private detectedVSync: VSyncInfo | null = null;
-  private frameTimeHistory: number[] = [];
+  // Ring buffer with running sum/sum-of-squares for O(1) mean and variance
   private readonly HISTORY_SIZE = 120;
   private readonly VSYNC_THRESHOLD = 0.05;
+  private frameTimeHistory = new Float32Array(this.HISTORY_SIZE);
+  private frameTimeIndex = 0;
+  private frameTimeCount = 0;
+  private frameTimeSum = 0;
+  private frameTimeSumSq = 0;
+  private frameTimeResync = 0;
   private lastFrameTime: number = 0;
 
   private externalData: StatsData | null = null;
@@ -83,8 +111,10 @@ class Stats extends StatsCore {
     trackCPT = false,
     trackHz = false,
     trackFPS = true,
+    trackVRAM = false,
     logsPerSecond = 4,
     graphsPerSecond = 30,
+    texturesPerSecond = 10,
     samplesLog = 40,
     samplesGraph = 10,
     precision = 2,
@@ -97,6 +127,7 @@ class Stats extends StatsCore {
       trackCPT,
       trackHz,
       trackFPS,
+      trackVRAM,
       logsPerSecond,
       graphsPerSecond,
       samplesLog,
@@ -107,11 +138,11 @@ class Stats extends StatsCore {
     this.mode = mode;
     this.horizontal = horizontal;
     this.minimal = minimal;
+    this.texturesPerSecond = texturesPerSecond;
+    this.prevTextureTime = performance.now();
 
     this.dom = document.createElement('div');
     this.initializeDOM();
-
-    this._panelId = 0;
 
     if (this.trackFPS) {
       this.fpsPanel = this.addPanel(new Stats.Panel('FPS', '#0ff', '#002'));
@@ -150,22 +181,13 @@ class Stats extends StatsCore {
     if (this.minimal) {
       this.dom.addEventListener('click', this.handleClick);
       this.showPanel(this.mode);
-    } else {
-      window.addEventListener('resize', this.handleResize);
     }
   }
 
   private handleClick = (event: MouseEvent): void => {
     event.preventDefault();
-    this.showPanel(++this.mode % this.dom.children.length);
-  };
-
-  private handleResize = (): void => {
-    if (this.fpsPanel) this.resizePanel(this.fpsPanel);
-    if (this.msPanel) this.resizePanel(this.msPanel);
-    if (this.workerCpuPanel) this.resizePanel(this.workerCpuPanel);
-    if (this.gpuPanel) this.resizePanel(this.gpuPanel);
-    if (this.gpuPanelCompute) this.resizePanel(this.gpuPanelCompute);
+    if (this.panels.length === 0) return;
+    this.showPanel(++this.mode % this.panels.length);
   };
 
   /**
@@ -235,6 +257,13 @@ class Stats extends StatsCore {
     // Panel already created in constructor
   }
 
+  protected override onVRAMSupported(): void {
+    if (!this.vramPanel) {
+      this.vramPanel = this.addPanel(new PanelMemory('VRAM', '#e0e', '#202')) as PanelMemory;
+      if (this.minimal) this.showPanel(this.mode);
+    }
+  }
+
   public setData(data: StatsData): void {
     this.externalData = data;
     this.hasNewExternalData = true;
@@ -244,17 +273,13 @@ class Stats extends StatsCore {
       this.isWorker = true;
 
       this.workerCpuPanel = new Stats.Panel('WRK', '#f90', '#220');
-      const insertPosition = this.msPanel.id + 1;
-      this.workerCpuPanel.id = insertPosition;
 
-      // Shift IDs of panels that come after
-      if (this.gpuPanel && this.gpuPanel.id >= insertPosition) {
-        this.gpuPanel.id++;
-        this.resizePanel(this.gpuPanel);
-      }
-      if (this.gpuPanelCompute && this.gpuPanelCompute.id >= insertPosition) {
-        this.gpuPanelCompute.id++;
-        this.resizePanel(this.gpuPanelCompute);
+      // Insert after msPanel and re-derive ids from display order
+      const insertIndex = this.panels.indexOf(this.msPanel) + 1;
+      this.panels.splice(insertIndex, 0, this.workerCpuPanel);
+      for (let i = 0; i < this.panels.length; i++) {
+        this.panels[i].id = i;
+        this.resizePanel(this.panels[i]);
       }
 
       // Insert canvas after msPanel in DOM
@@ -265,8 +290,13 @@ class Stats extends StatsCore {
         this.dom.appendChild(this.workerCpuPanel.canvas);
       }
 
-      this.resizePanel(this.workerCpuPanel);
-      this._panelId++;
+      // resizePanel hides panels in minimal mode - restore the active one
+      if (this.minimal) this.showPanel(this.mode % this.panels.length);
+    }
+
+    // Worker forwards VRAM (three WebGPURenderer in worker)
+    if (data.vram !== undefined && data.vram > 0 && this.trackVRAM && !this.vramPanel) {
+      this.onVRAMSupported();
     }
   }
 
@@ -285,6 +315,7 @@ class Stats extends StatsCore {
     this.endProfiling();
     this.addToAverage(this.totalCpuDuration, this.averageCpu);
     this.totalCpuDuration = 0;
+    this.beginDepth = 0; // frame boundary - see resetCounters()
 
     // Only add worker data when new message arrived
     if (this.hasNewExternalData) {
@@ -292,6 +323,9 @@ class Stats extends StatsCore {
       this.addToAverage(data.fps, this.averageFps);
       this.addToAverage(data.gpu, this.averageGpu);
       this.addToAverage(data.gpuCompute, this.averageGpuCompute);
+      if (data.vram !== undefined) {
+        this.addToAverage(data.vram, this.averageVram);
+      }
       this.hasNewExternalData = false;
     }
 
@@ -300,16 +334,7 @@ class Stats extends StatsCore {
 
   private updateFromInternalData(): void {
     this.endProfiling();
-
-    if (this.webgpuNative) {
-      // Native WebGPU: resolve timestamps async
-      this.resolveTimestampsAsync();
-    } else if (!this.info) {
-      this.processGpuQueries();
-    } else {
-      this.processWebGPUTimestamps();
-    }
-
+    this.processFrameTimings();
     this.updateAverages();
     this.resetCounters();
     this.renderPanels();
@@ -320,18 +345,12 @@ class Stats extends StatsCore {
 
     // Only calculate FPS locally when not using worker data
     if (!this.isWorker) {
-      this.frameTimes.push(currentTime);
-
-      while (this.frameTimes.length > 0 && this.frameTimes[0] <= currentTime - 1000) {
-        this.frameTimes.shift();
-      }
-
-      const fps = Math.round(this.frameTimes.length);
-      this.addToAverage(fps, this.averageFps);
+      this.addToAverage(this.calculateFps(), this.averageFps);
     }
 
     const shouldUpdateText = currentTime >= this.prevTextTime + 1000 / this.logsPerSecond;
     const shouldUpdateGraph = currentTime >= this.prevGraphTime + 1000 / this.graphsPerSecond;
+    const shouldUpdateTextures = currentTime >= this.prevTextureTime + 1000 / this.texturesPerSecond;
 
     const suffix = this.isWorker ? ' ⛭' : '';
     this.updatePanelComponents(this.fpsPanel, this.averageFps, 0, shouldUpdateText, shouldUpdateGraph, suffix);
@@ -347,14 +366,20 @@ class Stats extends StatsCore {
     if (this.trackCPT && this.gpuPanelCompute) {
       this.updatePanelComponents(this.gpuPanelCompute, this.averageGpuCompute, this.precision, shouldUpdateText, shouldUpdateGraph, suffix);
     }
+    if (this.vramPanel) {
+      this.updateVramPanel(shouldUpdateText, shouldUpdateGraph, suffix);
+    }
 
     if (shouldUpdateText) {
       this.prevTextTime = currentTime;
     }
     if (shouldUpdateGraph) {
       this.prevGraphTime = currentTime;
+    }
+    if (shouldUpdateTextures) {
+      this.prevTextureTime = currentTime;
 
-      // Update texture panels at graph rate (prevent overlapping async updates)
+      // Update texture panels (prevent overlapping async updates)
       if (this.texturePanels.size > 0 && !this.textureUpdatePending) {
         this.textureUpdatePending = true;
         this.updateTexturePanels().finally(() => {
@@ -369,18 +394,47 @@ class Stats extends StatsCore {
     if (this.vsyncPanel !== null) {
       this.detectVSync(currentTime);
 
-      const vsyncValue = this.detectedVSync?.refreshRate || 0;
-
-      if (shouldUpdateText && vsyncValue > 0) {
+      if (shouldUpdateText) {
+        const vsyncValue = this.detectedVSync?.refreshRate || 0;
         this.vsyncPanel.update(vsyncValue, vsyncValue);
       }
     }
   }
 
-  protected override resetCounters(): void {
-    this.renderCount = 0;
-    this.totalCpuDuration = 0;
-    this.beginTime = performance.now();
+  private updateVramPanel(shouldUpdateText: boolean, shouldUpdateGraph: boolean, suffix: string): void {
+    const logs = this.averageVram.logs;
+    if (!this.vramPanel || logs.length === 0) return;
+    if (!shouldUpdateText && !shouldUpdateGraph) return;
+
+    const currentValue = logs[logs.length - 1];
+    if (currentValue > this.vramMaxSeen) this.vramMaxSeen = currentValue;
+
+    if (shouldUpdateText) {
+      // Exact value (no smoothing) - memory should read precisely
+      this.vramPanel.update(currentValue, maxOf(logs), this.precision, suffix, minOf(logs));
+      this.updateVramTooltip();
+    }
+
+    if (shouldUpdateGraph) {
+      // Scale against the running max with headroom: a windowed max would pin
+      // a near-constant signal to the top of the graph
+      this.vramPanel.updateGraph(currentValue, this.vramMaxSeen * 1.25);
+    }
+  }
+
+  private updateVramTooltip(): void {
+    const memory = this.info?.memory;
+    const canvas = this.vramPanel?.canvas;
+    if (!memory || !canvas || !('title' in canvas)) return;
+
+    const mb = (bytes?: number) => ((bytes ?? 0) * BYTES_TO_MB).toFixed(1);
+    canvas.title =
+      `VRAM (tracked allocations)\n` +
+      `textures: ${mb(memory.texturesSize)} MB (${memory.textures})\n` +
+      `geometry: ${mb((memory.attributesSize ?? 0) + (memory.indexAttributesSize ?? 0))} MB (${memory.geometries})\n` +
+      `storage: ${mb((memory.storageAttributesSize ?? 0) + (memory.indirectStorageAttributesSize ?? 0))} MB\n` +
+      `programs: ${mb(memory.programsSize)} MB (${memory.programs ?? 0})\n` +
+      `render targets: ${memory.renderTargets ?? 0}`;
   }
 
   resizePanel(panel: Panel) {
@@ -403,17 +457,18 @@ class Stats extends StatsCore {
   addPanel(panel: Panel) {
     if (panel.canvas) {
       this.dom.appendChild(panel.canvas);
-      panel.id = this._panelId;
+      panel.id = this.panels.length;
+      this.panels.push(panel);
       this.resizePanel(panel);
-      this._panelId++;
     }
     return panel;
   }
 
   showPanel(id: number) {
-    for (let i = 0; i < this.dom.children.length; i++) {
-      const child = this.dom.children[i] as HTMLElement;
-      child.style.display = i === id ? 'block' : 'none';
+    // Only metric panels participate in cycling - the VSync overlay and the
+    // texture row are not part of the rotation
+    for (let i = 0; i < this.panels.length; i++) {
+      this.panels[i].canvas.style.display = i === id ? 'block' : 'none';
     }
     this.mode = id;
   }
@@ -567,6 +622,8 @@ class Stats extends StatsCore {
       this.texturePanels.delete(name);
       this.textureSourcesWebGL.delete(name);
       this.textureSourcesWebGPU.delete(name);
+      this.textureCaptureWebGL?.removeSource(name);
+      this.textureCaptureWebGPU?.removeSource(name);
     }
   }
 
@@ -578,7 +635,7 @@ class Stats extends StatsCore {
     // Check for renderer dimension changes every frame
     this.updateTexturePreviewDimensions();
 
-    // Update WebGL textures
+    // Update WebGL textures: poll-based async readback (PBO + fence), no stall
     if (this.textureCaptureWebGL) {
       for (const [name, source] of this.textureSourcesWebGL) {
         const panel = this.texturePanels.get(name);
@@ -594,22 +651,28 @@ class Stats extends StatsCore {
             height = source.target.height || height;
           }
 
-          const bitmap = await this.textureCaptureWebGL.capture(framebuffer, width, height, name);
-          if (bitmap) {
-            panel.updateTexture(bitmap);
+          const result = this.textureCaptureWebGL.captureSync(framebuffer, width, height, name);
+          if (result) {
+            panel.updatePixels(result.pixels, result.width, result.height);
           }
         }
       }
     }
 
-    // Update WebGPU textures
-    if (this.textureCaptureWebGPU) {
+    // Update WebGPU textures: all sources batched into a single submission
+    if (this.textureCaptureWebGPU && this.textureSourcesWebGPU.size > 0) {
+      const entries: Array<{ key: string; texture: any }> = [];
       for (const [name, gpuTexture] of this.textureSourcesWebGPU) {
-        const panel = this.texturePanels.get(name);
-        if (panel) {
-          const bitmap = await this.textureCaptureWebGPU.capture(gpuTexture);
-          if (bitmap) {
-            panel.updateTexture(bitmap);
+        if (this.texturePanels.has(name)) {
+          entries.push({ key: name, texture: gpuTexture });
+        }
+      }
+      if (entries.length > 0) {
+        const results = await this.textureCaptureWebGPU.captureBatch(entries);
+        for (const result of results) {
+          const panel = this.texturePanels.get(result.key);
+          if (panel) {
+            panel.updatePixels(result.pixels, result.width, result.height);
           }
         }
       }
@@ -639,20 +702,45 @@ class Stats extends StatsCore {
     const frameTime = currentTime - this.lastFrameTime;
     this.lastFrameTime = currentTime;
 
-    this.frameTimeHistory.push(frameTime);
-    if (this.frameTimeHistory.length > this.HISTORY_SIZE) {
-      this.frameTimeHistory.shift();
+    // Ignore pauses (tab switch, debugger) - one outlier would poison the
+    // variance for the whole history window
+    if (frameTime > 250) return;
+
+    // Ring buffer write with running sum / sum of squares
+    if (this.frameTimeCount === this.HISTORY_SIZE) {
+      const evicted = this.frameTimeHistory[this.frameTimeIndex];
+      this.frameTimeSum -= evicted;
+      this.frameTimeSumSq -= evicted * evicted;
+    } else {
+      this.frameTimeCount++;
+    }
+    this.frameTimeHistory[this.frameTimeIndex] = frameTime;
+    this.frameTimeSum += frameTime;
+    this.frameTimeSumSq += frameTime * frameTime;
+    this.frameTimeIndex = (this.frameTimeIndex + 1) % this.HISTORY_SIZE;
+
+    // Periodically recompute the running sums to cancel float drift
+    if (++this.frameTimeResync >= 600) {
+      this.frameTimeResync = 0;
+      let sum = 0;
+      let sumSq = 0;
+      for (let i = 0; i < this.frameTimeCount; i++) {
+        const t = this.frameTimeHistory[i];
+        sum += t;
+        sumSq += t * t;
+      }
+      this.frameTimeSum = sum;
+      this.frameTimeSumSq = sumSq;
     }
 
-    if (this.frameTimeHistory.length < 60) return;
+    if (this.frameTimeCount < 60) return;
 
-    const avgFrameTime = this.frameTimeHistory.reduce((a, b) => a + b) / this.frameTimeHistory.length;
+    const mean = this.frameTimeSum / this.frameTimeCount;
+    const variance = Math.max(0, this.frameTimeSumSq / this.frameTimeCount - mean * mean);
+    const stdDev = Math.sqrt(variance);
 
-    const variance = this.frameTimeHistory.reduce((acc, time) =>
-      acc + Math.pow(time - avgFrameTime, 2), 0) / this.frameTimeHistory.length;
-    const stability = Math.sqrt(variance);
-
-    if (stability > 2) {
+    // Relative stability gate (~2ms at 60Hz, scales with refresh rate)
+    if (stdDev > mean * 0.12) {
       this.detectedVSync = null;
       return;
     }
@@ -661,7 +749,7 @@ class Stats extends StatsCore {
     let smallestDiff = Infinity;
 
     for (const rate of this.VSYNC_RATES) {
-      const diff = Math.abs(avgFrameTime - rate.frameTime);
+      const diff = Math.abs(mean - rate.frameTime);
       if (diff < smallestDiff) {
         smallestDiff = diff;
         closestMatch = rate;
@@ -684,92 +772,25 @@ class Stats extends StatsCore {
     suffix = ''
   ) {
     if (!panel || averageArray.logs.length === 0) return;
+    if (!shouldUpdateText && !shouldUpdateGraph) return;
 
-    // Use panel.id as key to avoid collision between panels with same name
-    const key = String(panel.id);
-
-    if (!(key in this.lastMin)) {
-      this.lastMin[key] = Infinity;
-      this.lastMax[key] = 0;
-      this.lastValue[key] = 0;
-    }
-
-    const currentValue = averageArray.logs[averageArray.logs.length - 1];
-
-    this.lastMax[key] = Math.max(...averageArray.logs);
-    this.lastMin[key] = Math.min(this.lastMin[key], currentValue);
-    this.lastValue[key] = this.lastValue[key] * 0.7 + currentValue * 0.3;
-
-    const graphMax = Math.max(
-      Math.max(...averageArray.logs),
-      ...averageArray.graph.slice(-this.samplesGraph)
-    );
-
-    this.updateCounter++;
+    const logs = averageArray.logs;
+    const currentValue = logs[logs.length - 1];
 
     if (shouldUpdateText) {
-      panel.update(
-        this.lastValue[key],
-        this.lastMax[key],
-        precision,
-        suffix
-      );
+      // EMA at text cadence: the gate makes smoothing wall-clock based,
+      // independent of the frame rate
+      panel.emaValue = panel.emaValue === null
+        ? currentValue
+        : panel.emaValue * 0.6 + currentValue * 0.4;
+
+      panel.update(panel.emaValue, maxOf(logs), precision, suffix, minOf(logs));
     }
 
     if (shouldUpdateGraph) {
-      panel.updateGraph(
-        currentValue,
-        graphMax
-      );
-    }
-  }
-
-  updatePanel(panel: { update: any; updateGraph: any; name: string; } | null, averageArray: { logs: number[], graph: number[] }, precision = 2) {
-    if (!panel || averageArray.logs.length === 0) return;
-
-    const currentTime = performance.now();
-
-    if (!(panel.name in this.lastMin)) {
-      this.lastMin[panel.name] = Infinity;
-      this.lastMax[panel.name] = 0;
-      this.lastValue[panel.name] = 0;
-    }
-
-    const currentValue = averageArray.logs[averageArray.logs.length - 1];
-    const recentMax = Math.max(...averageArray.logs.slice(-30));
-
-    this.lastMin[panel.name] = Math.min(this.lastMin[panel.name], currentValue);
-    this.lastMax[panel.name] = Math.max(this.lastMax[panel.name], currentValue);
-
-    this.lastValue[panel.name] = this.lastValue[panel.name] * 0.7 + currentValue * 0.3;
-
-    const graphMax = Math.max(recentMax, ...averageArray.graph.slice(-this.samplesGraph));
-
-    this.updateCounter++;
-
-    if (this.updateCounter % (this.logsPerSecond * 2) === 0) {
-      this.lastMax[panel.name] = recentMax;
-      this.lastMin[panel.name] = currentValue;
-    }
-
-    if (panel.update) {
-      if (currentTime >= this.prevCpuTime + 1000 / this.logsPerSecond) {
-        panel.update(
-          this.lastValue[panel.name],
-          currentValue,
-          this.lastMax[panel.name],
-          graphMax,
-          precision
-        );
-      }
-
-      if (currentTime >= this.prevGraphTime + 1000 / this.graphsPerSecond) {
-        panel.updateGraph(
-          currentValue,
-          graphMax
-        );
-        this.prevGraphTime = currentTime;
-      }
+      // graph[] is already capped at samplesGraph by addToAverage
+      const graphMax = Math.max(maxOf(logs), maxOf(averageArray.graph));
+      panel.updateGraph(currentValue, graphMax);
     }
   }
 
@@ -784,8 +805,6 @@ class Stats extends StatsCore {
     // Remove event listeners
     if (this.minimal) {
       this.dom.removeEventListener('click', this.handleClick);
-    } else {
-      window.removeEventListener('resize', this.handleResize);
     }
 
     // Dispose texture capture helpers
@@ -825,15 +844,27 @@ class Stats extends StatsCore {
     this.dom.remove();
 
     // Clear panel references
+    this.panels.length = 0;
     this.fpsPanel = null;
     this.msPanel = null;
     this.gpuPanel = null;
     this.gpuPanelCompute = null;
+    this.vramPanel = null;
     this.vsyncPanel = null;
     this.workerCpuPanel = null;
+    this.vramMaxSeen = 0;
 
-    // Clear tracking arrays
-    this.frameTimeHistory.length = 0;
+    // Reset tracking state
+    this.frameTimeIndex = 0;
+    this.frameTimeCount = 0;
+    this.frameTimeSum = 0;
+    this.frameTimeSumSq = 0;
+    this.frameTimeResync = 0;
+    this.lastFrameTime = 0;
+    this.detectedVSync = null;
+    this.externalData = null;
+    this.hasNewExternalData = false;
+    this.isWorker = false;
     this.averageWorkerCpu.logs.length = 0;
     this.averageWorkerCpu.graph.length = 0;
 
@@ -844,9 +875,11 @@ class Stats extends StatsCore {
 
 
 export default Stats;
-export type { StatsData } from './core';
+export type { StatsData, StatsCoreOptions, AverageData, InfoMemoryData } from './core';
+export type { StatsOptions };
 export { StatsProfiler } from './profiler';
+export { Panel } from './panel';
+export { PanelMemory } from './panelMemory';
 export { PanelTexture } from './panelTexture';
 export { TextureCaptureWebGL, TextureCaptureWebGPU } from './textureCapture';
-export { StatsGLCapture } from './statsGLNode';
 

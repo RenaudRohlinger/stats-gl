@@ -3,6 +3,10 @@ import { Panel } from './panel';
 class PanelTexture extends Panel {
   private currentBitmap: ImageBitmap | null = null;
   private sourceAspect: number = 1; // Source texture aspect ratio (width/height)
+  // Reused scratch surface for the pixel path (no ImageBitmap/ImageData churn)
+  private scratchCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
+  private scratchContext: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
+  private scratchImageData: ImageData | null = null;
 
   constructor(name: string) {
     super(name, '#fff', '#111');
@@ -45,14 +49,11 @@ class PanelTexture extends Panel {
     this.sourceAspect = width / height;
   }
 
-  public updateTexture(bitmap: ImageBitmap): void {
+  /**
+   * Draw any canvas-compatible source aspect-fitted into the panel.
+   */
+  private drawSource(source: CanvasImageSource): void {
     if (!this.context) return;
-
-    // Close previous bitmap to release GPU resources
-    if (this.currentBitmap) {
-      this.currentBitmap.close();
-    }
-    this.currentBitmap = bitmap;
 
     // Clear entire panel
     this.context.fillStyle = '#000';
@@ -79,17 +80,59 @@ class PanelTexture extends Panel {
       destY = 0;
     }
 
-    // Draw the bitmap with proper aspect ratio
-    this.context.drawImage(
-      bitmap,
-      destX,
-      destY,
-      destWidth,
-      destHeight
-    );
+    this.context.drawImage(source, destX, destY, destWidth, destHeight);
 
     // Draw label overlay on top
     this.drawLabelOverlay();
+  }
+
+  public updateTexture(bitmap: ImageBitmap): void {
+    if (!this.context) return;
+
+    // Close previous bitmap to release GPU resources
+    if (this.currentBitmap) {
+      this.currentBitmap.close();
+    }
+    this.currentBitmap = bitmap;
+
+    this.drawSource(bitmap);
+  }
+
+  /**
+   * Synchronous, allocation-free (steady state) update from raw RGBA pixels.
+   * Pixels go through a reused scratch canvas so they can be aspect-scaled.
+   */
+  public updatePixels(pixels: Uint8ClampedArray | Uint8Array, width: number, height: number): void {
+    if (!this.context) return;
+
+    if (!this.scratchCanvas || this.scratchCanvas.width !== width || this.scratchCanvas.height !== height) {
+      if (typeof OffscreenCanvas !== 'undefined') {
+        this.scratchCanvas = new OffscreenCanvas(width, height);
+      } else {
+        this.scratchCanvas = document.createElement('canvas');
+        this.scratchCanvas.width = width;
+        this.scratchCanvas.height = height;
+      }
+      this.scratchContext = this.scratchCanvas.getContext('2d') as CanvasRenderingContext2D;
+      this.scratchImageData = null;
+    }
+    if (!this.scratchContext) return;
+
+    if (!this.scratchImageData) {
+      this.scratchImageData = this.scratchContext.createImageData(width, height);
+    }
+    this.scratchImageData.data.set(pixels);
+    this.scratchContext.putImageData(this.scratchImageData, 0, 0);
+
+    this.drawSource(this.scratchCanvas as CanvasImageSource);
+  }
+
+  /**
+   * Draw a live canvas directly (used by the TSL node addon on the main thread).
+   */
+  public updateFromCanvas(canvas: HTMLCanvasElement | OffscreenCanvas): void {
+    this.setSourceSize(canvas.width, canvas.height);
+    this.drawSource(canvas as CanvasImageSource);
   }
 
   public setLabel(label: string): void {
@@ -116,6 +159,9 @@ class PanelTexture extends Panel {
       this.currentBitmap.close();
       this.currentBitmap = null;
     }
+    this.scratchCanvas = null;
+    this.scratchContext = null;
+    this.scratchImageData = null;
   }
 }
 

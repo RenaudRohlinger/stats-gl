@@ -18,6 +18,8 @@ https://github.com/RenaudRohlinger/stats-gl/assets/15867665/3fdafff4-1357-4872-9
 
 ```bash
 npm install stats-gl
+# or
+bun add stats-gl
 ```
 
 ## Quick Start
@@ -28,7 +30,7 @@ npm install stats-gl
 import Stats from 'stats-gl';
 import * as THREE from 'three';
 
-const stats = new Stats({ trackGPU: true });
+const stats = new Stats({ trackGPU: true, trackVRAM: true });
 document.body.appendChild(stats.dom);
 
 const renderer = new THREE.WebGLRenderer(); // or WebGPURenderer
@@ -40,6 +42,9 @@ function animate() {
 }
 renderer.setAnimationLoop(animate);
 ```
+
+With `WebGPURenderer`, GPU/compute timestamps are resolved automatically inside
+`stats.update()` — no manual `renderer.resolveTimestampsAsync()` call is needed.
 
 ### Native WebGL2
 
@@ -134,14 +139,38 @@ import { StatsGl } from '@tresjs/cientos'
 | `trackGPU` | boolean | `false` | Enable GPU timing (requires extension support) |
 | `trackHz` | boolean | `false` | Enable refresh rate detection |
 | `trackCPT` | boolean | `false` | Enable Three.js compute shader timing (WebGPU only) |
+| `trackVRAM` | boolean | `false` | Enable VRAM panel (Three.js WebGPURenderer only) |
 | `logsPerSecond` | number | `4` | How often to update text display |
 | `graphsPerSecond` | number | `30` | How often to update graphs |
+| `texturesPerSecond` | number | `10` | How often to capture texture preview panels |
 | `samplesLog` | number | `40` | Number of samples for text averaging |
 | `samplesGraph` | number | `10` | Number of samples for graph averaging |
 | `precision` | number | `2` | Decimal places for CPU/GPU values |
 | `minimal` | boolean | `false` | Minimal mode - click to cycle panels |
 | `horizontal` | boolean | `true` | Horizontal panel layout |
 | `mode` | number | `0` | Initial panel (0=FPS, 1=CPU, 2=GPU) |
+
+## VRAM Panel (Three.js WebGPURenderer)
+
+With `trackVRAM: true`, stats-gl reads the byte-level memory tracking that three.js
+maintains on `renderer.info.memory` (r18x+, both the WebGPU and the WebGL fallback
+backend) and shows the total as a panel — adaptively formatted as MB/GB, with a
+breakdown tooltip on hover (textures, geometry, storage buffers, programs, render
+target count).
+
+```js
+const stats = new Stats({ trackVRAM: true });
+stats.init(renderer); // THREE.WebGPURenderer
+```
+
+Notes:
+- The value is three's *tracked allocation estimate*, not driver-reported VRAM.
+  Compressed texture sizes are not fully accounted for by three yet, and
+  internal/transient allocations (canvas depth/MSAA buffers) are not included.
+- The classic `WebGLRenderer` only exposes resource *counts*, so the panel is
+  unavailable there (it simply won't appear).
+- Workers: forward `getData().vram` from a `StatsProfiler` and the main-thread
+  panel picks it up via `setData()`.
 
 ## Web Worker / OffscreenCanvas
 
@@ -194,6 +223,7 @@ worker.onmessage = (e) => {
 };
 
 function loop() {
+  stats.begin(); // optional: measures main-thread CPU alongside worker stats
   stats.update();
   requestAnimationFrame(loop);
 }
@@ -208,8 +238,10 @@ loop();
 - `begin()` / `end(encoder?)` - Wrap your render calls (pass encoder for native WebGPU)
 - `getTimestampWrites()` - Get timestampWrites config for native WebGPU render pass
 - `update()` - Process timing data
-- `getData()` - Returns `{ fps, cpu, gpu, gpuCompute }`
-- `captureTexture(source, sourceId)` - Capture texture to ImageBitmap for transfer
+- `getData()` - Returns `{ fps, cpu, gpu, gpuCompute, vram }`
+- `captureTexture(source, sourceId)` - Capture texture to ImageBitmap for transfer.
+  Readback is asynchronous (PBO + fence): the first call returns `null` and later
+  calls return the previous capture. Pass a unique `sourceId` per source.
 
 ### Stats.setData()
 
@@ -401,10 +433,11 @@ stats.dispose();                // Clean up resources
 ```js
 import Stats, {
   StatsProfiler,           // Headless profiler for workers
+  Panel,                   // Base metric panel class
+  PanelMemory,             // VRAM panel class (MB/GB formatting)
   PanelTexture,            // Texture preview panel class
-  TextureCaptureWebGL,     // WebGL texture capture utility
-  TextureCaptureWebGPU,    // WebGPU texture capture utility
-  StatsGLCapture           // Addon capture helper
+  TextureCaptureWebGL,     // WebGL texture capture utility (PBO + fence)
+  TextureCaptureWebGPU     // WebGPU texture capture utility (batched readback)
 } from 'stats-gl';
 
 // TSL Node capture addon (WebGPU only, works in main thread and workers)
@@ -414,6 +447,15 @@ import { statsGL, flushCaptures } from 'stats-gl/addons/StatsGLNode.js';
 ## Contributing
 
 Contributions to stats-gl are welcome. Please report any issues or bugs you encounter.
+
+Development uses [Bun](https://bun.sh):
+
+```bash
+bun install        # install dependencies
+bun run dev        # demo dev server
+bun run build      # build the library (tsc + vite + rollup)
+bun run test       # logic smoke tests against dist/
+```
 
 ## License
 

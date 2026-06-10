@@ -230,9 +230,9 @@ async function render() {
 
   // Render via PostProcessing
   postProcessing.render();
-  renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER )
 
   profiler.end();
+  // GPU timestamps resolve automatically inside profiler.update()
   profiler.update();
 
   // Send stats data to main thread

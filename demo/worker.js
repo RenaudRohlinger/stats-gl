@@ -239,18 +239,19 @@ async function render() {
   profiler.end();
   profiler.update();
 
-  // Capture textures and send to main thread
+  // Capture textures and send to main thread.
+  // Distinct sourceIds keep the per-source async readbacks independent.
   const colorBitmap = await profiler.captureTexture({
     framebuffer: colorFbo,
     width: fboSize,
     height: fboSize
-  });
+  }, 'color');
 
   const lumaBitmap = await profiler.captureTexture({
     framebuffer: lumaFbo,
     width: fboSize,
     height: fboSize
-  });
+  }, 'luma');
 
   // Send stats data
   const statsData = profiler.getData();

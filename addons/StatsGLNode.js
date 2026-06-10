@@ -35,7 +35,10 @@ class CaptureData {
     this.quad = null;
     this.material = null;
     this.initialized = false;
-    this.size = 90;
+    // Panel aspect (90x48) so previews aren't squashed through a square target
+    this.width = 90;
+    this.height = 48;
+    this._rendererState = {};
   }
 
   init(renderer) {
@@ -51,16 +54,17 @@ class CaptureData {
 
       // Create canvas (OffscreenCanvas in workers, regular canvas in main thread)
       if (isWorker) {
-        this.canvas = new OffscreenCanvas(this.size, this.size);
+        this.canvas = new OffscreenCanvas(this.width, this.height);
       } else {
         this.canvas = document.createElement('canvas');
-        this.canvas.width = this.canvas.height = this.size;
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
       }
 
       // Create canvas target
       this.canvasTarget = new CanvasTarget(this.canvas);
       this.canvasTarget.setPixelRatio(isWorker ? 1 : (window.devicePixelRatio || 1));
-      this.canvasTarget.setSize(this.size, this.size, false);
+      this.canvasTarget.setSize(this.width, this.height, false);
 
       // Create material - use vec4(vec3(node), 1) like Inspector does
       let output = vec4(vec3(captureNode), 1);
@@ -88,9 +92,9 @@ class CaptureData {
     if (!this.initialized && !this.init(renderer)) return null;
 
     try {
-      // Save renderer state
+      // Save renderer state (cached state object - no per-capture allocation)
       const previousCanvasTarget = renderer.getCanvasTarget();
-      const state = RendererUtils.resetRendererState(renderer);
+      const state = RendererUtils.resetRendererState(renderer, this._rendererState);
 
       // Set rendering parameters
       renderer.toneMapping = NoToneMapping;
@@ -106,20 +110,28 @@ class CaptureData {
       renderer.setCanvasTarget(previousCanvasTarget);
       RendererUtils.restoreRendererState(renderer, state);
 
-      // Create bitmap from canvas
-      const bitmap = await createImageBitmap(this.canvas);
-
-      // In main thread with stats, update panel directly
+      // In main thread with stats, draw the capture canvas straight into the
+      // panel - synchronous and allocation-free (no ImageBitmap round trip)
       if (!isWorker && this.stats) {
         const panel = this.stats.texturePanels.get(this.name);
         if (panel) {
-          panel.updateTexture(bitmap);
+          if (panel.updateFromCanvas) {
+            panel.updateFromCanvas(this.canvas);
+          } else {
+            // stats-gl < 4.2 fallback
+            const bitmap = await createImageBitmap(this.canvas);
+            panel.updateTexture(bitmap);
+          }
         }
         return null; // Panel updated directly
       }
 
-      // In worker or without stats, return bitmap
-      return bitmap;
+      // In worker (or without stats) return a transferable bitmap.
+      // transferToImageBitmap is synchronous and detaches the current frame.
+      if (this.canvas.transferToImageBitmap) {
+        return this.canvas.transferToImageBitmap();
+      }
+      return await createImageBitmap(this.canvas);
     } catch (e) {
       console.warn('StatsGL: Failed to capture for', this.name, e);
       return null;

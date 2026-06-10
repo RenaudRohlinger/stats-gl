@@ -15,29 +15,42 @@ export interface TextureCaptureSource {
   __webglFramebuffer?: WebGLFramebuffer;
 }
 
+export interface CapturedPixels {
+  pixels: Uint8ClampedArray;
+  width: number;
+  height: number;
+}
+
 // Default preview dimensions (matches full PANEL size for texture panels)
 const DEFAULT_PREVIEW_WIDTH = 90;
 const DEFAULT_PREVIEW_HEIGHT = 48;
 
 // =============================================================================
-// WebGL2 Texture Capture with PBO double-buffering
+// WebGL2 Texture Capture - PBO + fence async readback (no pipeline stall)
 // =============================================================================
+
+interface PendingReadWebGL {
+  pbo: WebGLBuffer;
+  fence: WebGLSync;
+}
 
 export class TextureCaptureWebGL {
   private gl: WebGL2RenderingContext;
   private previewFbo: WebGLFramebuffer | null = null;
   private previewTexture: WebGLTexture | null = null;
-  private pixels: Uint8Array;
-  private flippedPixels: Uint8Array;
+  private pixels: Uint8ClampedArray;
   private previewWidth: number;
   private previewHeight: number;
+  private pending: Map<string, PendingReadWebGL> = new Map();
+  private pboPool: WebGLBuffer[] = [];
+  // Reused ImageData per source for the ImageBitmap (worker transfer) path
+  private imageDataCache: Map<string, ImageData> = new Map();
 
   constructor(gl: WebGL2RenderingContext, width = DEFAULT_PREVIEW_WIDTH, height = DEFAULT_PREVIEW_HEIGHT) {
     this.gl = gl;
     this.previewWidth = width;
     this.previewHeight = height;
-    this.pixels = new Uint8Array(width * height * 4);
-    this.flippedPixels = new Uint8Array(width * height * 4);
+    this.pixels = new Uint8ClampedArray(width * height * 4);
     this.initResources();
   }
 
@@ -49,10 +62,10 @@ export class TextureCaptureWebGL {
 
     this.previewWidth = width;
     this.previewHeight = height;
-    this.pixels = new Uint8Array(width * height * 4);
-    this.flippedPixels = new Uint8Array(width * height * 4);
+    this.pixels = new Uint8ClampedArray(width * height * 4);
+    this.imageDataCache.clear();
 
-    // Recreate resources with new dimensions
+    // Recreate resources with new dimensions (PBOs are size-dependent)
     this.dispose();
     this.initResources();
   }
@@ -77,59 +90,134 @@ export class TextureCaptureWebGL {
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
-  public async capture(
+  /**
+   * Poll-based capture: issues an async readback (blit + PBO readPixels + fence)
+   * and returns the PREVIOUS readback for this source once its fence signals.
+   * Never blocks the GPU pipeline; results lag one capture tick.
+   *
+   * The returned pixel buffer is reused across calls - consume immediately.
+   */
+  public captureSync(
     source: WebGLFramebuffer | null,
     sourceWidth: number,
     sourceHeight: number,
-    _sourceId: string = 'default'
-  ): Promise<ImageBitmap | null> {
+    sourceId: string = 'default'
+  ): CapturedPixels | null {
     const gl = this.gl;
+    let result: CapturedPixels | null = null;
 
-    // Save current state
+    // 1. Harvest the previous readback if its fence signaled
+    const pending = this.pending.get(sourceId);
+    if (pending) {
+      const status = gl.getSyncParameter(pending.fence, gl.SYNC_STATUS);
+      if (status !== gl.SIGNALED) {
+        // GPU not done yet - don't queue more work for this source
+        return null;
+      }
+
+      gl.deleteSync(pending.fence);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pending.pbo);
+      gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.pixels);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      this.pboPool.push(pending.pbo);
+      this.pending.delete(sourceId);
+
+      result = { pixels: this.pixels, width: this.previewWidth, height: this.previewHeight };
+    }
+
+    // 2. Issue the next readback
     const prevReadFbo = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING);
     const prevDrawFbo = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING);
 
-    // Blit source to preview FBO with LINEAR filtering (downscale)
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, source);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.previewFbo);
+    // Inverted destination Y flips the image during the blit, so the readback
+    // is already top-down and needs no CPU flip
     gl.blitFramebuffer(
       0, 0, sourceWidth, sourceHeight,
-      0, 0, this.previewWidth, this.previewHeight,
+      0, this.previewHeight, this.previewWidth, 0,
       gl.COLOR_BUFFER_BIT,
       gl.LINEAR
     );
 
-    // Synchronous read - fine for small preview
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.previewFbo);
-    gl.readPixels(0, 0, this.previewWidth, this.previewHeight, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
+    const byteLength = this.previewWidth * this.previewHeight * 4;
+    let pbo = this.pboPool.pop() ?? null;
+    if (!pbo) {
+      pbo = gl.createBuffer();
+      if (pbo) {
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+        gl.bufferData(gl.PIXEL_PACK_BUFFER, byteLength, gl.STREAM_READ);
+      }
+    } else {
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+    }
+
+    if (pbo) {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.previewFbo);
+      // With a PIXEL_PACK buffer bound this is asynchronous
+      gl.readPixels(0, 0, this.previewWidth, this.previewHeight, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+
+      const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      if (fence) {
+        this.pending.set(sourceId, { pbo, fence });
+      } else {
+        this.pboPool.push(pbo);
+      }
+    }
 
     // Restore state
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, prevReadFbo);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, prevDrawFbo);
 
-    // Flip Y axis (WebGL has origin at bottom-left)
-    const flipped = this.flipY(this.pixels, this.previewWidth, this.previewHeight);
-    const imageData = new ImageData(new Uint8ClampedArray(flipped), this.previewWidth, this.previewHeight);
+    return result;
+  }
+
+  /**
+   * ImageBitmap capture (for worker transfer via postMessage).
+   * Prefer captureSync() + PanelTexture.updatePixels() on the main thread.
+   */
+  public async capture(
+    source: WebGLFramebuffer | null,
+    sourceWidth: number,
+    sourceHeight: number,
+    sourceId: string = 'default'
+  ): Promise<ImageBitmap | null> {
+    const result = this.captureSync(source, sourceWidth, sourceHeight, sourceId);
+    if (!result) return null;
+
+    let imageData = this.imageDataCache.get(sourceId);
+    if (!imageData || imageData.width !== result.width || imageData.height !== result.height) {
+      imageData = new ImageData(result.width, result.height);
+      this.imageDataCache.set(sourceId, imageData);
+    }
+    imageData.data.set(result.pixels);
 
     return createImageBitmap(imageData);
   }
 
-  private flipY(pixels: Uint8Array, width: number, height: number): Uint8Array {
-    const rowSize = width * 4;
-    for (let y = 0; y < height; y++) {
-      const srcOffset = y * rowSize;
-      const dstOffset = (height - 1 - y) * rowSize;
-      this.flippedPixels.set(pixels.subarray(srcOffset, srcOffset + rowSize), dstOffset);
+  public removeSource(sourceId: string): void {
+    const pending = this.pending.get(sourceId);
+    if (pending) {
+      this.gl.deleteSync(pending.fence);
+      this.pboPool.push(pending.pbo);
+      this.pending.delete(sourceId);
     }
-    return this.flippedPixels;
-  }
-
-  public removeSource(_sourceId: string): void {
-    // No per-source state in sync mode
+    this.imageDataCache.delete(sourceId);
   }
 
   public dispose(): void {
     const gl = this.gl;
+    for (const pending of this.pending.values()) {
+      gl.deleteSync(pending.fence);
+      gl.deleteBuffer(pending.pbo);
+    }
+    this.pending.clear();
+    for (const pbo of this.pboPool) {
+      gl.deleteBuffer(pbo);
+    }
+    this.pboPool.length = 0;
+    this.imageDataCache.clear();
     if (this.previewFbo) {
       gl.deleteFramebuffer(this.previewFbo);
       this.previewFbo = null;
@@ -142,26 +230,39 @@ export class TextureCaptureWebGL {
 }
 
 // =============================================================================
-// WebGPU Texture Capture with blit pipeline and staging buffer
+// WebGPU Texture Capture - batched blits, per-source staging, cached bind groups
 // =============================================================================
+
+export interface CaptureBatchEntry {
+  key: string;
+  texture: GPUTexture;
+}
+
+export interface CaptureBatchResult extends CapturedPixels {
+  key: string;
+}
 
 export class TextureCaptureWebGPU {
   private device: GPUDevice;
   private previewTexture: GPUTexture | null = null;
-  private stagingBuffer: GPUBuffer | null = null;
+  private previewView: any | null = null; // GPUTextureView
   private blitPipeline: GPURenderPipeline | null = null;
   private sampler: GPUSampler | null = null;
   private bindGroupLayout: GPUBindGroupLayout | null = null;
   private initialized = false;
   private previewWidth: number;
   private previewHeight: number;
-  private pixelsBuffer: Uint8ClampedArray;
+  // Per-source resources, reused across captures
+  private stagingBuffers: Map<string, GPUBuffer> = new Map();
+  private pixelBuffers: Map<string, Uint8ClampedArray> = new Map();
+  private imageDataCache: Map<string, ImageData> = new Map();
+  // Bind groups cached per source texture; entries die with the texture
+  private bindGroupCache: WeakMap<GPUTexture, GPUBindGroup> = new WeakMap();
 
   constructor(device: GPUDevice, width = DEFAULT_PREVIEW_WIDTH, height = DEFAULT_PREVIEW_HEIGHT) {
     this.device = device;
     this.previewWidth = width;
     this.previewHeight = height;
-    this.pixelsBuffer = new Uint8ClampedArray(width * height * 4);
   }
 
   /**
@@ -172,39 +273,37 @@ export class TextureCaptureWebGPU {
 
     this.previewWidth = width;
     this.previewHeight = height;
-    this.pixelsBuffer = new Uint8ClampedArray(width * height * 4);
 
-    // Dispose texture and buffer (they need new dimensions)
+    // Size-dependent resources are recreated lazily
     if (this.previewTexture) this.previewTexture.destroy();
-    if (this.stagingBuffer) this.stagingBuffer.destroy();
     this.previewTexture = null;
-    this.stagingBuffer = null;
+    this.previewView = null;
+    for (const buffer of this.stagingBuffers.values()) {
+      if ((buffer as any).mapState === 'unmapped') buffer.destroy();
+    }
+    this.stagingBuffers.clear();
+    this.pixelBuffers.clear();
+    this.imageDataCache.clear();
 
-    // Recreate on next capture
     if (this.initialized) {
       this.createSizeResources();
     }
   }
 
-  private createSizeResources(): void {
-    const device = this.device;
+  private get bytesPerRow(): number {
+    return Math.ceil(this.previewWidth * 4 / 256) * 256;
+  }
 
-    // Create preview texture
-    this.previewTexture = device.createTexture({
+  private createSizeResources(): void {
+    this.previewTexture = this.device.createTexture({
       size: { width: this.previewWidth, height: this.previewHeight },
       format: 'rgba8unorm',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
     });
-
-    // Create staging buffer for readback
-    const bytesPerRow = Math.ceil(this.previewWidth * 4 / 256) * 256;
-    this.stagingBuffer = device.createBuffer({
-      size: bytesPerRow * this.previewHeight,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-    });
+    this.previewView = this.previewTexture.createView();
   }
 
-  private async initResources(): Promise<void> {
+  private initResources(): void {
     if (this.initialized) return;
 
     const device = this.device;
@@ -280,74 +379,151 @@ export class TextureCaptureWebGPU {
     this.initialized = true;
   }
 
-  public async capture(source: GPUTexture): Promise<ImageBitmap | null> {
-    await this.initResources();
+  private getBindGroup(texture: GPUTexture): GPUBindGroup {
+    let bindGroup = this.bindGroupCache.get(texture);
+    if (!bindGroup) {
+      bindGroup = this.device.createBindGroup({
+        layout: this.bindGroupLayout!,
+        entries: [
+          { binding: 0, resource: this.sampler! },
+          { binding: 1, resource: texture.createView() }
+        ]
+      });
+      this.bindGroupCache.set(texture, bindGroup);
+    }
+    return bindGroup;
+  }
 
-    if (!this.previewTexture || !this.stagingBuffer || !this.blitPipeline || !this.sampler || !this.bindGroupLayout) {
-      return null;
+  private getStagingBuffer(key: string): GPUBuffer {
+    let buffer = this.stagingBuffers.get(key);
+    if (!buffer) {
+      buffer = this.device.createBuffer({
+        size: this.bytesPerRow * this.previewHeight,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+      });
+      this.stagingBuffers.set(key, buffer);
+    }
+    return buffer;
+  }
+
+  /**
+   * Capture several sources with a single command submission.
+   * Per-source pixel buffers are reused across calls - consume immediately.
+   */
+  public async captureBatch(entries: CaptureBatchEntry[]): Promise<CaptureBatchResult[]> {
+    this.initResources();
+
+    if (!this.previewTexture || !this.blitPipeline || entries.length === 0) {
+      return [];
     }
 
     const device = this.device;
-
-    // Create bind group for source texture
-    const bindGroup = device.createBindGroup({
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: source.createView() }
-      ]
-    });
-
-    // Blit source to preview texture
+    const bytesPerRow = this.bytesPerRow;
     const commandEncoder = device.createCommandEncoder();
+    const jobs: Array<{ key: string; buffer: GPUBuffer }> = [];
 
-    const renderPass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: this.previewTexture.createView(),
-        loadOp: 'clear',
-        storeOp: 'store',
-        clearValue: { r: 0, g: 0, b: 0, a: 1 }
-      }]
-    });
+    for (const { key, texture } of entries) {
+      const buffer = this.getStagingBuffer(key);
+      if ((buffer as any).mapState !== 'unmapped') continue; // previous readback in flight
 
-    renderPass.setPipeline(this.blitPipeline);
-    renderPass.setBindGroup(0, bindGroup);
-    renderPass.draw(3);
-    renderPass.end();
+      const renderPass = commandEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: this.previewView,
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        }]
+      });
+      renderPass.setPipeline(this.blitPipeline);
+      renderPass.setBindGroup(0, this.getBindGroup(texture));
+      renderPass.draw(3);
+      renderPass.end();
 
-    // Copy to staging buffer
-    const bytesPerRow = Math.ceil(this.previewWidth * 4 / 256) * 256;
-    commandEncoder.copyTextureToBuffer(
-      { texture: this.previewTexture },
-      { buffer: this.stagingBuffer, bytesPerRow },
-      { width: this.previewWidth, height: this.previewHeight }
-    );
+      // Commands execute in order: this copy completes before the next pass
+      // overwrites the shared preview texture
+      commandEncoder.copyTextureToBuffer(
+        { texture: this.previewTexture },
+        { buffer, bytesPerRow },
+        { width: this.previewWidth, height: this.previewHeight }
+      );
+
+      jobs.push({ key, buffer });
+    }
+
+    if (jobs.length === 0) return [];
 
     device.queue.submit([commandEncoder.finish()]);
 
-    // Map and read staging buffer
-    await this.stagingBuffer.mapAsync(GPUMapMode.READ);
-    const data = new Uint8Array(this.stagingBuffer.getMappedRange());
+    const width = this.previewWidth;
+    const height = this.previewHeight;
 
-    // Copy data (accounting for row alignment) into pre-allocated buffer
-    for (let y = 0; y < this.previewHeight; y++) {
-      const srcOffset = y * bytesPerRow;
-      const dstOffset = y * this.previewWidth * 4;
-      this.pixelsBuffer.set(data.subarray(srcOffset, srcOffset + this.previewWidth * 4), dstOffset);
+    const results = await Promise.all(jobs.map(async ({ key, buffer }) => {
+      try {
+        await buffer.mapAsync(GPUMapMode.READ);
+      } catch (_) {
+        return null; // buffer destroyed (resize/dispose) while mapping
+      }
+
+      let pixels = this.pixelBuffers.get(key);
+      if (!pixels || pixels.length !== width * height * 4) {
+        pixels = new Uint8ClampedArray(width * height * 4);
+        this.pixelBuffers.set(key, pixels);
+      }
+
+      const data = new Uint8Array(buffer.getMappedRange());
+      for (let y = 0; y < height; y++) {
+        const srcOffset = y * bytesPerRow;
+        const dstOffset = y * width * 4;
+        pixels.set(data.subarray(srcOffset, srcOffset + width * 4), dstOffset);
+      }
+      buffer.unmap();
+
+      return { key, pixels, width, height };
+    }));
+
+    return results.filter((r): r is CaptureBatchResult => r !== null);
+  }
+
+  /**
+   * Single-source ImageBitmap capture (for worker transfer via postMessage).
+   * Prefer captureBatch() + PanelTexture.updatePixels() on the main thread.
+   */
+  public async capture(source: GPUTexture, sourceId: string = 'default'): Promise<ImageBitmap | null> {
+    const results = await this.captureBatch([{ key: sourceId, texture: source }]);
+    if (results.length === 0) return null;
+
+    const { pixels, width, height } = results[0];
+
+    let imageData = this.imageDataCache.get(sourceId);
+    if (!imageData || imageData.width !== width || imageData.height !== height) {
+      imageData = new ImageData(width, height);
+      this.imageDataCache.set(sourceId, imageData);
     }
+    imageData.data.set(pixels);
 
-    this.stagingBuffer.unmap();
-
-    // ImageData needs its own Uint8ClampedArray - create from pre-allocated buffer
-    const imageData = new ImageData(new Uint8ClampedArray(this.pixelsBuffer), this.previewWidth, this.previewHeight);
     return createImageBitmap(imageData);
+  }
+
+  public removeSource(sourceId: string): void {
+    const buffer = this.stagingBuffers.get(sourceId);
+    if (buffer && (buffer as any).mapState === 'unmapped') {
+      buffer.destroy();
+    }
+    this.stagingBuffers.delete(sourceId);
+    this.pixelBuffers.delete(sourceId);
+    this.imageDataCache.delete(sourceId);
   }
 
   public dispose(): void {
     if (this.previewTexture) this.previewTexture.destroy();
-    if (this.stagingBuffer) this.stagingBuffer.destroy();
     this.previewTexture = null;
-    this.stagingBuffer = null;
+    this.previewView = null;
+    for (const buffer of this.stagingBuffers.values()) {
+      if ((buffer as any).mapState === 'unmapped') buffer.destroy();
+    }
+    this.stagingBuffers.clear();
+    this.pixelBuffers.clear();
+    this.imageDataCache.clear();
     this.blitPipeline = null;
     this.sampler = null;
     this.bindGroupLayout = null;

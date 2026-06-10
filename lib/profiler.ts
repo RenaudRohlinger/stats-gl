@@ -19,12 +19,7 @@ export class StatsProfiler extends StatsCore {
 
   public update(): void {
     this.endProfiling();
-
-    if (!this.info) {
-      this.processGpuQueries();
-    } else {
-      this.processWebGPUTimestamps();
-    }
+    this.processFrameTimings();
 
     const fps = this.calculateFps();
     this.addToAverage(fps, this.averageFps);
@@ -87,13 +82,13 @@ export class StatsProfiler extends StatsCore {
       if ((source as ThreeTextureSource).isRenderTarget && this.gpuBackend) {
         const gpuTexture = extractWebGPUSource(source as ThreeTextureSource, this.gpuBackend);
         if (gpuTexture) {
-          return this.textureCaptureWebGPU.capture(gpuTexture);
+          return this.textureCaptureWebGPU.capture(gpuTexture, sourceId);
         }
       }
 
       // Raw GPUTexture
       if (source && typeof source.createView === 'function') {
-        return this.textureCaptureWebGPU.capture(source);
+        return this.textureCaptureWebGPU.capture(source, sourceId);
       }
     }
 

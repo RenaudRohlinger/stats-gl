@@ -33,7 +33,7 @@ renderer.setAnimationLoop(animate);
 import Stats from 'stats-gl';
 import * as THREE from 'three';
 
-const stats = new Stats({ trackGPU: true, trackCPT: true });
+const stats = new Stats({ trackGPU: true, trackCPT: true, trackVRAM: true });
 document.body.appendChild(stats.dom);
 
 const renderer = new THREE.WebGPURenderer();
@@ -41,10 +41,15 @@ stats.init(renderer);
 
 async function animate() {
   await renderer.renderAsync(scene, camera);
-  stats.update();
+  stats.update(); // GPU/compute timestamps resolve automatically here
 }
 renderer.setAnimationLoop(animate);
 ```
+
+Notes:
+- No manual `renderer.resolveTimestampsAsync()` needed - stats.update() handles it.
+- `trackVRAM: true` adds a VRAM panel reading three's byte-level memory tracking
+  (`renderer.info.memory`, r18x+; WebGPURenderer only, hover for a breakdown).
 
 ## 3. Native WebGL2
 
@@ -247,8 +252,10 @@ for (const { name, bitmap } of captures) {
 | trackGPU | false | GPU timing |
 | trackHz | false | Refresh rate |
 | trackCPT | false | Compute timing (WebGPU) |
+| trackVRAM | false | VRAM panel (Three.js WebGPURenderer only) |
 | logsPerSecond | 4 | Text update rate |
 | graphsPerSecond | 30 | Graph update rate |
+| texturesPerSecond | 10 | Texture preview capture rate |
 | samplesLog | 40 | Text averaging samples |
 | samplesGraph | 10 | Graph averaging samples |
 | precision | 2 | Decimal places |
@@ -282,8 +289,10 @@ profiler.begin()                  // Start timing
 profiler.end(encoder?)            // End timing (pass encoder for native WebGPU)
 profiler.update()                 // Process data
 profiler.getTimestampWrites()     // Get timestampWrites for native WebGPU
-profiler.getData()                // { fps, cpu, gpu, gpuCompute }
-profiler.captureTexture(src, id)  // Capture to ImageBitmap
+profiler.getData()                // { fps, cpu, gpu, gpuCompute, vram }
+profiler.captureTexture(src, id)  // Capture to ImageBitmap (async readback:
+                                  // first call returns null, then previous frame;
+                                  // use a unique id per source)
 profiler.dispose()                // Cleanup
 ```
 
@@ -292,10 +301,11 @@ profiler.dispose()                // Cleanup
 ```js
 import Stats, {
   StatsProfiler,
+  Panel,
+  PanelMemory,
   PanelTexture,
   TextureCaptureWebGL,
-  TextureCaptureWebGPU,
-  StatsGLCapture
+  TextureCaptureWebGPU
 } from 'stats-gl';
 
 // TSL Node addon (WebGPU only, works in main thread and workers)

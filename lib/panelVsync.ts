@@ -51,6 +51,10 @@ class PanelVSync extends Panel {
         this.vsyncValue = value;
 
         this.context.clearRect(0, 0, this.WIDTH, this.HEIGHT);
+
+        // No stable refresh rate detected - leave the overlay empty
+        if (value <= 0) return;
+
         // Draw VSync text
         this.context.globalAlpha = 1;
         this.context.fillStyle = this.bg;

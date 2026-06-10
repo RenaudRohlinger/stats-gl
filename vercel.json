@@ -1,4 +1,5 @@
 {
-  "buildCommand": "npm run build:demo",
+  "installCommand": "bun install",
+  "buildCommand": "bun run build:demo",
   "outputDirectory": "dist-demo"
 }

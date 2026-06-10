@@ -6,6 +6,8 @@ class Panel {
     bg: string;
     gradient: CanvasGradient | null;
     id: number = 0;
+    /** Smoothed display value, maintained by Stats at text-update cadence */
+    emaValue: number | null = null;
     PR: number;
     WIDTH: number;
     HEIGHT: number;
@@ -57,29 +59,9 @@ class Panel {
             this.GRAPH_Y + this.GRAPH_HEIGHT
         );
 
-        let startColor: string;
-        const endColor: string = this.fg;
-
-        switch (this.fg.toLowerCase()) {
-            case '#0ff':
-                startColor = '#006666';
-                break;
-            case '#0f0':
-                startColor = '#006600';
-                break;
-            case '#ff0':
-                startColor = '#666600';
-                break;
-            case '#e1e1e1':
-                startColor = '#666666';
-                break;
-            default:
-                startColor = this.bg;
-                break;
-        }
-
-        gradient.addColorStop(0, startColor);
-        gradient.addColorStop(1, endColor);
+        // Darkened foreground as the gradient start so any panel color works
+        gradient.addColorStop(0, darkenColor(this.fg, 0.4) ?? this.bg);
+        gradient.addColorStop(1, this.fg);
 
         return gradient;
     }
@@ -107,11 +89,19 @@ class Panel {
     }
 
     // Update only text portion
-    public update(value: number, maxValue: number, decimals: number = 0, suffix: string = '') {
-        if (!this.context || !this.gradient) return;
-
-        const min = Math.min(Infinity, value);
+    public update(value: number, maxValue: number, decimals: number = 0, suffix: string = '', minValue: number = value) {
+        const min = Math.min(minValue, value);
         const max = Math.max(maxValue, value);
+
+        this.drawText(
+            `${value.toFixed(decimals)} ${this.name}`,
+            ` (${parseFloat(min.toFixed(decimals))}-${parseFloat(max.toFixed(decimals))})`,
+            suffix
+        );
+    }
+
+    protected drawText(valueAndName: string, rangeText: string, suffix: string = '') {
+        if (!this.context || !this.gradient) return;
 
         // Clear only the text area (from top to GRAPH_Y)
         this.context.globalAlpha = 1;
@@ -119,7 +109,6 @@ class Panel {
         this.context.fillRect(0, 0, this.WIDTH, this.GRAPH_Y);
 
         // Draw value and name
-        const valueAndName = `${value.toFixed(decimals)} ${this.name}`;
         this.context.fillStyle = this.fg;
         this.context.fillText(valueAndName, this.TEXT_X, this.TEXT_Y);
 
@@ -134,11 +123,7 @@ class Panel {
 
         // Draw range
         this.context.fillStyle = this.fg;
-        this.context.fillText(
-            ` (${min.toFixed(decimals)}-${parseFloat(max.toFixed(decimals))})`,
-            textX,
-            this.TEXT_Y
-        );
+        this.context.fillText(rangeText, textX, this.TEXT_Y);
     }
 
     // Update only graph portion
@@ -203,6 +188,29 @@ class Panel {
 
         this.context.globalAlpha = 1;
     }
+}
+
+/**
+ * Darken a #rgb/#rrggbb color by the given factor. Returns null for
+ * unparseable input (e.g. named or rgba() colors) so callers can fall back.
+ */
+function darkenColor(color: string, factor: number): string | null {
+    if (color[0] !== '#') return null;
+
+    let hex = color.slice(1);
+    if (hex.length === 3) {
+        hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    }
+    if (hex.length !== 6) return null;
+
+    const rgb = parseInt(hex, 16);
+    if (Number.isNaN(rgb)) return null;
+
+    const r = Math.round(((rgb >> 16) & 0xff) * factor);
+    const g = Math.round(((rgb >> 8) & 0xff) * factor);
+    const b = Math.round((rgb & 0xff) * factor);
+
+    return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
 
 export { Panel };
