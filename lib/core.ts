@@ -8,6 +8,22 @@ export interface StatsCoreOptions {
   samplesLog?: number;
   samplesGraph?: number;
   precision?: number;
+  /**
+   * Maximum number of timestamp pairs (begin/end) the native WebGPU path can record per frame.
+   * Each pair costs 16 bytes in a single QuerySet. Default 2048 (matches Three.js's WebGPUTimestampQueryPool).
+   */
+  maxTimestampPairs?: number;
+}
+
+export type TimestampPassType = 'render' | 'compute';
+
+interface InFlightTimestampFrame {
+  buffer: GPUBuffer;
+  pairCount: number;
+  slotTypes: ReadonlyArray<TimestampPassType>;
+  mapPromise: Promise<void> | null;
+  ready: boolean;
+  error: unknown | null;
 }
 
 export interface QueryInfo {
@@ -58,13 +74,23 @@ export class StatsCore {
   protected threeRendererPatched = false;
 
   // Native WebGPU timing support
+  public maxTimestampPairs: number = 2048;
   protected webgpuNative: boolean = false;
   protected gpuQuerySet: GPUQuerySet | null = null;
   protected gpuResolveBuffer: GPUBuffer | null = null;
-  protected gpuReadBuffers: GPUBuffer[] = [];
-  protected gpuWriteBufferIndex: number = 0; // Buffer to write to this frame
-  protected gpuFrameCount: number = 0; // Track frames for first-frame skip
-  protected pendingResolve: Promise<number> | null = null;
+  protected gpuTimestampBufferSize: number = 0; // querySet.count * 8
+
+  // Per-frame slot allocator (reset on begin())
+  protected frameCursor: number = 0;
+  protected slotTypes: TimestampPassType[] = [];
+
+  // Async readback infrastructure
+  protected readBufferPool: GPUBuffer[] = []; // unmapped buffers ready for reuse
+  protected inFlightFrames: InFlightTimestampFrame[] = [];
+  protected readonly poolWarnThreshold: number = 8;
+  protected warnedMapError: boolean = false;
+  protected warnedSlotOverflow: boolean = false;
+  protected warnedPoolGrowth: boolean = false;
 
   protected beginTime: number;
   protected prevCpuTime: number;
@@ -95,7 +121,8 @@ export class StatsCore {
     graphsPerSecond = 30,
     samplesLog = 40,
     samplesGraph = 10,
-    precision = 2
+    precision = 2,
+    maxTimestampPairs = 2048
   }: StatsCoreOptions = {}) {
     this.trackGPU = trackGPU;
     this.trackCPT = trackCPT;
@@ -106,6 +133,7 @@ export class StatsCore {
     this.precision = precision;
     this.logsPerSecond = logsPerSecond;
     this.graphsPerSecond = graphsPerSecond;
+    this.maxTimestampPairs = Math.max(1, maxTimestampPairs);
 
     const now = performance.now();
     this.prevGraphTime = now;
@@ -157,25 +185,37 @@ export class StatsCore {
   protected initializeWebGPUTiming(): void {
     if (!this.gpuDevice) return;
 
-    // Create query set for 2 timestamps (begin + end)
+    const count = this.maxTimestampPairs * 2;
+    this.gpuTimestampBufferSize = count * 8; // 8 bytes per u64 timestamp
+
     this.gpuQuerySet = this.gpuDevice.createQuerySet({
       type: 'timestamp',
-      count: 2
+      count
     });
 
-    // Buffer to resolve query results (2 * 8 bytes for BigInt64)
     this.gpuResolveBuffer = this.gpuDevice.createBuffer({
-      size: 16,
+      size: this.gpuTimestampBufferSize,
       usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
     });
+  }
 
-    // Double-buffered read buffers for async readback
-    for (let i = 0; i < 2; i++) {
-      this.gpuReadBuffers.push(this.gpuDevice.createBuffer({
-        size: 16,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-      }));
+  private acquireReadBuffer(): GPUBuffer | null {
+    if (!this.gpuDevice) return null;
+    const recycled = this.readBufferPool.pop();
+    if (recycled) return recycled;
+
+    const totalLive = this.inFlightFrames.length + this.readBufferPool.length + 1;
+    if (totalLive > this.poolWarnThreshold && !this.warnedPoolGrowth) {
+      console.warn(
+        `stats-gl: WebGPU timestamp readback pool grew to ${totalLive} buffers — ` +
+        `is update() being called every frame after queue.submit?`
+      );
+      this.warnedPoolGrowth = true;
     }
+    return this.gpuDevice.createBuffer({
+      size: this.gpuTimestampBufferSize,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    });
   }
 
   protected handleThreeRenderer(renderer: any): boolean {
@@ -255,24 +295,48 @@ export class StatsCore {
   }
 
   /**
-   * Get timestampWrites configuration for WebGPU render pass.
-   * Use this when creating your render pass descriptor.
-   * @returns timestampWrites object or undefined if not tracking GPU
+   * Allocate a fresh timestamp pair (beginning + end) and return the descriptor
+   * to embed in a render or compute pass. Each call consumes one pair from the
+   * per-frame budget; counters reset on the next `begin()`.
+   *
+   * @param type - 'render' (default) or 'compute' — controls which panel the
+   *               resolved duration is added to.
+   * @returns timestampWrites object, or `undefined` if the native WebGPU path
+   *          is not active or the per-frame pair budget is exhausted.
    */
-  public getTimestampWrites(): GPURenderPassTimestampWrites | undefined {
+  public getTimestampWrites(
+    type: TimestampPassType = 'render'
+  ): GPURenderPassTimestampWrites | undefined {
     if (!this.webgpuNative || !this.gpuQuerySet) return undefined;
+    if (this.frameCursor >= this.maxTimestampPairs) {
+      if (!this.warnedSlotOverflow) {
+        console.warn(
+          `stats-gl: WebGPU timestamp pair budget exhausted ` +
+          `(maxTimestampPairs=${this.maxTimestampPairs}). ` +
+          `Increase maxTimestampPairs in StatsOptions to instrument more passes.`
+        );
+        this.warnedSlotOverflow = true;
+      }
+      return undefined;
+    }
+    const i = this.frameCursor++;
+    this.slotTypes[i] = type;
     return {
       querySet: this.gpuQuerySet,
-      beginningOfPassWriteIndex: 0,
-      endOfPassWriteIndex: 1
+      beginningOfPassWriteIndex: i * 2,
+      endOfPassWriteIndex: i * 2 + 1
     };
   }
 
   public begin(encoder?: GPUCommandEncoder): void {
     this.beginProfiling();
 
-    // For native WebGPU, timing is handled via timestampWrites in render pass
+    // For native WebGPU, timing is handled via timestampWrites in the
+    // render/compute pass descriptors returned by getTimestampWrites().
+    // Reset the per-frame slot allocator here so the next pass starts at index 0.
     if (this.webgpuNative) {
+      this.frameCursor = 0;
+      this.slotTypes.length = 0;
       return;
     }
 
@@ -291,18 +355,27 @@ export class StatsCore {
   public end(encoder?: GPUCommandEncoder): void {
     this.renderCount++;
 
-    // Handle native WebGPU timing - resolve query and copy to read buffer
-    if (this.webgpuNative && encoder && this.gpuQuerySet && this.gpuResolveBuffer && this.gpuReadBuffers.length > 0) {
-      // Track frame count for first-frame skip
-      this.gpuFrameCount++;
+    // Native WebGPU: resolve the slots used this frame and queue a buffer read.
+    if (this.webgpuNative && encoder && this.gpuQuerySet && this.gpuResolveBuffer) {
+      const usedPairs = this.frameCursor;
+      if (usedPairs > 0) {
+        const usedQueries = usedPairs * 2;
+        const usedBytes = usedQueries * 8;
+        // resolveQuerySet writes into gpuResolveBuffer, which is never mapped — safe to call always.
+        encoder.resolveQuerySet(this.gpuQuerySet, 0, usedQueries, this.gpuResolveBuffer, 0);
 
-      // Write to current buffer (will read from other buffer in resolve)
-      const writeBuffer = this.gpuReadBuffers[this.gpuWriteBufferIndex];
-
-      // Only add resolve commands if the target buffer is unmapped
-      if ((writeBuffer as any).mapState === 'unmapped') {
-        encoder.resolveQuerySet(this.gpuQuerySet, 0, 2, this.gpuResolveBuffer, 0);
-        encoder.copyBufferToBuffer(this.gpuResolveBuffer, 0, writeBuffer, 0, 16);
+        const readBuffer = this.acquireReadBuffer();
+        if (readBuffer) {
+          encoder.copyBufferToBuffer(this.gpuResolveBuffer, 0, readBuffer, 0, usedBytes);
+          this.inFlightFrames.push({
+            buffer: readBuffer,
+            pairCount: usedPairs,
+            slotTypes: this.slotTypes.slice(0, usedPairs),
+            mapPromise: null,
+            ready: false,
+            error: null
+          });
+        }
       }
 
       this.endProfiling();
@@ -319,63 +392,66 @@ export class StatsCore {
   }
 
   /**
-   * Resolve WebGPU timestamp queries. Call this after queue.submit().
-   * Returns a promise that resolves to the GPU duration in milliseconds.
+   * Drive the WebGPU timestamp readback pipeline. Call once per frame, AFTER
+   * queue.submit(). Kicks off mapAsync for any newly-submitted in-flight frames
+   * and drains any frames whose mapping has resolved (oldest first).
+   *
+   * Returns the most recently resolved render-pass duration in milliseconds.
    */
   public async resolveTimestampsAsync(): Promise<number> {
-    if (!this.webgpuNative || this.gpuReadBuffers.length === 0) {
-      return this.totalGpuDuration;
+    if (!this.webgpuNative) return this.totalGpuDuration;
+
+    // Kick off mapAsync for any frames that haven't started mapping yet.
+    // The user is expected to have called queue.submit() before update(),
+    // so the copy commands are now in flight on the GPU.
+    for (const entry of this.inFlightFrames) {
+      if (entry.mapPromise === null) {
+        entry.mapPromise = entry.buffer.mapAsync(GPUMapMode.READ).then(
+          () => { entry.ready = true; },
+          (e) => { entry.error = e; entry.ready = true; }
+        );
+      }
     }
 
-    // If there's already a pending resolve, wait for it
-    if (this.pendingResolve) {
-      return this.pendingResolve;
+    // Drain completed frames in submission order. Each completed frame
+    // overwrites totalGpuDuration / totalGpuDurationCompute, so the latest
+    // resolved frame's data is what the panels see.
+    while (this.inFlightFrames.length > 0 && this.inFlightFrames[0].ready) {
+      const entry = this.inFlightFrames.shift()!;
+      if (entry.error) {
+        if (!this.warnedMapError) {
+          console.warn('stats-gl: WebGPU timestamp mapAsync failed', entry.error);
+          this.warnedMapError = true;
+        }
+        this.totalGpuDuration = 0;
+        this.totalGpuDurationCompute = 0;
+        // Failed mapAsync leaves the buffer unmapped; safe to recycle.
+        this.readBufferPool.push(entry.buffer);
+        continue;
+      }
+
+      const data = new BigUint64Array(entry.buffer.getMappedRange());
+      let renderNs = 0;
+      let computeNs = 0;
+      for (let i = 0; i < entry.pairCount; i++) {
+        const start = data[i * 2];
+        const end = data[i * 2 + 1];
+        // Guard against rare disjoint timestamps (end < start) and stay in Number land.
+        const delta = end >= start ? Number(end - start) : 0;
+        if (entry.slotTypes[i] === 'compute') {
+          computeNs += delta;
+        } else {
+          renderNs += delta;
+        }
+      }
+      entry.buffer.unmap();
+      this.readBufferPool.push(entry.buffer);
+
+      this.totalGpuDuration = renderNs / 1_000_000;
+      this.totalGpuDurationCompute = computeNs / 1_000_000;
     }
 
-    // Read from the OTHER buffer (written in previous frame)
-    // Current frame writes to gpuWriteBufferIndex, so read from the other one
-    const readBufferIndex = (this.gpuWriteBufferIndex + 1) % 2;
-    const readBuffer = this.gpuReadBuffers[readBufferIndex];
-
-    // Toggle write buffer for next frame
-    this.gpuWriteBufferIndex = (this.gpuWriteBufferIndex + 1) % 2;
-
-    // Skip first frame (no previous data to read)
-    if (this.gpuFrameCount < 2) {
-      return this.totalGpuDuration;
-    }
-
-    // Only attempt to map if buffer is unmapped
-    if ((readBuffer as any).mapState !== 'unmapped') {
-      return this.totalGpuDuration;
-    }
-
-    this.pendingResolve = this._resolveTimestamps(readBuffer);
-
-    try {
-      const result = await this.pendingResolve;
-      return result;
-    } finally {
-      this.pendingResolve = null;
-    }
-  }
-
-  private async _resolveTimestamps(readBuffer: GPUBuffer): Promise<number> {
-    try {
-      await readBuffer.mapAsync(GPUMapMode.READ);
-      const data = new BigInt64Array(readBuffer.getMappedRange());
-      const startTime = data[0];
-      const endTime = data[1];
-      readBuffer.unmap();
-
-      // Convert nanoseconds to milliseconds
-      const durationNs = Number(endTime - startTime);
-      this.totalGpuDuration = durationNs / 1_000_000;
-      return this.totalGpuDuration;
-    } catch (_) {
-      // Buffer may have been destroyed or mapping failed
-      return this.totalGpuDuration;
-    }
+    return this.totalGpuDuration;
   }
 
   protected processGpuQueries(): void {
@@ -434,7 +510,7 @@ export class StatsCore {
   protected updateAverages(): void {
     this.addToAverage(this.totalCpuDuration, this.averageCpu);
     this.addToAverage(this.totalGpuDuration, this.averageGpu);
-    if (this.info && this.totalGpuDurationCompute !== undefined) {
+    if ((this.info || this.webgpuNative) && this.totalGpuDurationCompute !== undefined) {
       this.addToAverage(this.totalGpuDurationCompute, this.averageGpuCompute);
     }
   }
@@ -527,15 +603,27 @@ export class StatsCore {
       this.gpuResolveBuffer.destroy();
       this.gpuResolveBuffer = null;
     }
-    for (const buffer of this.gpuReadBuffers) {
-      if ((buffer as any).mapState === 'mapped') {
-        buffer.unmap();
+    for (const entry of this.inFlightFrames) {
+      try {
+        if ((entry.buffer as any).mapState === 'mapped') {
+          entry.buffer.unmap();
+        }
+      } catch (_) {
+        // Buffer may already be in a terminal state.
       }
+      entry.buffer.destroy();
+    }
+    this.inFlightFrames.length = 0;
+    for (const buffer of this.readBufferPool) {
       buffer.destroy();
     }
-    this.gpuReadBuffers.length = 0;
-    this.gpuFrameCount = 0;
-    this.pendingResolve = null;
+    this.readBufferPool.length = 0;
+    this.frameCursor = 0;
+    this.slotTypes.length = 0;
+    this.gpuTimestampBufferSize = 0;
+    this.warnedMapError = false;
+    this.warnedSlotOverflow = false;
+    this.warnedPoolGrowth = false;
     this.webgpuNative = false;
 
     // Clear references

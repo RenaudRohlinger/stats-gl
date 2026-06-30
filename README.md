@@ -94,6 +94,49 @@ function animate() {
 animate();
 ```
 
+#### Multiple passes per frame (render + compute)
+
+`getTimestampWrites('render')` and `getTimestampWrites('compute')` allocate independent
+timestamp pairs. Each call consumes one pair from the per-frame budget; counters reset
+on the next `stats.begin()`. Render-pass durations sum into the **GPU** panel,
+compute-pass durations into the **CPT** panel.
+
+```js
+const stats = new Stats({ trackGPU: true, trackCPT: true });
+stats.init(device);
+
+function animate() {
+  stats.begin();
+
+  const encoder = device.createCommandEncoder();
+
+  const compute = encoder.beginComputePass({
+    timestampWrites: stats.getTimestampWrites('compute')
+  });
+  // ... dispatchWorkgroups ...
+  compute.end();
+
+  const shadowPass = encoder.beginRenderPass({
+    colorAttachments: [...],
+    timestampWrites: stats.getTimestampWrites('render')
+  });
+  // ... shadow draw calls ...
+  shadowPass.end();
+
+  const mainPass = encoder.beginRenderPass({
+    colorAttachments: [...],
+    timestampWrites: stats.getTimestampWrites('render')
+  });
+  // ... main draw calls ...
+  mainPass.end();
+
+  stats.end(encoder);
+  device.queue.submit([encoder.finish()]);
+  stats.update();
+  requestAnimationFrame(animate);
+}
+```
+
 ### React Three Fiber
 
 A `<StatsGl />` component is available through [@react-three/drei](https://github.com/pmndrs/drei):
@@ -133,12 +176,13 @@ import { StatsGl } from '@tresjs/cientos'
 | `trackFPS` | boolean | `true` | Enable built-in FPS and CPU panels |
 | `trackGPU` | boolean | `false` | Enable GPU timing (requires extension support) |
 | `trackHz` | boolean | `false` | Enable refresh rate detection |
-| `trackCPT` | boolean | `false` | Enable Three.js compute shader timing (WebGPU only) |
+| `trackCPT` | boolean | `false` | Enable compute-pass timing (WebGPU). Adds the **CPT** panel. |
 | `logsPerSecond` | number | `4` | How often to update text display |
 | `graphsPerSecond` | number | `30` | How often to update graphs |
 | `samplesLog` | number | `40` | Number of samples for text averaging |
 | `samplesGraph` | number | `10` | Number of samples for graph averaging |
 | `precision` | number | `2` | Decimal places for CPU/GPU values |
+| `maxTimestampPairs` | number | `2048` | Max begin/end timestamp pairs per frame on the native WebGPU path |
 | `minimal` | boolean | `false` | Minimal mode - click to cycle panels |
 | `horizontal` | boolean | `true` | Horizontal panel layout |
 | `mode` | number | `0` | Initial panel (0=FPS, 1=CPU, 2=GPU) |
@@ -387,13 +431,14 @@ Main class with DOM rendering.
 import Stats from 'stats-gl';
 
 const stats = new Stats(options);
-stats.init(renderer);           // Initialize with Three.js renderer, canvas, or GPUDevice
-stats.begin();                  // Start timing (auto-called for Three.js)
-stats.end(encoder?);            // End timing (pass encoder for native WebGPU)
-stats.update();                 // Update display
-stats.setData(data);            // Set external timing data
-stats.getTimestampWrites();     // Get timestampWrites for native WebGPU render pass
-stats.dispose();                // Clean up resources
+stats.init(renderer);                 // Initialize with Three.js renderer, canvas, or GPUDevice
+stats.begin();                        // Start timing (auto-called for Three.js)
+stats.end(encoder?);                  // End timing (pass encoder for native WebGPU)
+stats.update();                       // Update display
+stats.setData(data);                  // Set external timing data
+stats.getTimestampWrites('render');   // Allocate a render-pass timestamp pair
+stats.getTimestampWrites('compute');  // Allocate a compute-pass timestamp pair
+stats.dispose();                      // Clean up resources
 ```
 
 ### Named Exports

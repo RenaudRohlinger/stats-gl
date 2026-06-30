@@ -126,11 +126,11 @@
         <a href="/worker_tsl.html" class="nav-tab">Worker TSL</a>
       </div>
       <pre>
-<span class="comment">// Native WebGPU example</span>
+<span class="comment">// Native WebGPU - multi-pass timing</span>
 
 <span class="keyword">import</span> Stats <span class="keyword">from</span> <span class="string">'stats-gl'</span>
 
-<span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true });
+<span class="keyword">const</span> stats = <span class="keyword">new</span> Stats({ trackGPU: true, trackCPT: true });
 <span class="keyword">await</span> stats.init(device);
 document.body.appendChild(stats.dom);
 
@@ -138,12 +138,20 @@ document.body.appendChild(stats.dom);
     <span class="keyword">const</span> encoder = device.createCommandEncoder();
     stats.begin();
 
-    <span class="keyword">const</span> pass = encoder.beginRenderPass({
+    <span class="comment">// Compute pass → CPT panel</span>
+    <span class="keyword">const</span> cp = encoder.beginComputePass({
+        timestampWrites: stats.getTimestampWrites(<span class="string">'compute'</span>)
+    });
+    <span class="comment">// dispatchWorkgroups...</span>
+    cp.end();
+
+    <span class="comment">// Render pass → GPU panel</span>
+    <span class="keyword">const</span> rp = encoder.beginRenderPass({
         colorAttachments: [...],
-        timestampWrites: stats.getTimestampWrites()
+        timestampWrites: stats.getTimestampWrites(<span class="string">'render'</span>)
     });
     <span class="comment">// draw calls</span>
-    pass.end();
+    rp.end();
 
     stats.end(encoder);
     device.queue.submit([encoder.finish()]);
@@ -209,7 +217,7 @@ document.body.appendChild(stats.dom);
         });
 
         // Initialize stats with native WebGPU device
-        const stats = new Stats({ trackGPU: true, trackHz: true });
+        const stats = new Stats({ trackGPU: true, trackCPT: true, trackHz: true });
         await stats.init(device);
         document.body.appendChild(stats.dom);
 
@@ -314,6 +322,49 @@ document.body.appendChild(stats.dom);
           }]
         });
 
+        // ---- Compute pass setup (exercises stats.getTimestampWrites('compute')) ----
+        const computeShaderModule = device.createShaderModule({
+          code: `
+            @group(0) @binding(0) var<storage, read_write> data: array<u32, 64>;
+
+            @compute @workgroup_size(64)
+            fn computeMain(@builtin(global_invocation_id) gid: vec3u) {
+              data[gid.x] = data[gid.x] + 1u;
+            }
+          `
+        });
+
+        const computeBuffer = device.createBuffer({
+          size: 64 * 4,
+          usage: GPUBufferUsage.STORAGE
+        });
+
+        const computeBindGroupLayout = device.createBindGroupLayout({
+          entries: [{
+            binding: 0,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: { type: 'storage' }
+          }]
+        });
+
+        const computePipeline = device.createComputePipeline({
+          layout: device.createPipelineLayout({
+            bindGroupLayouts: [computeBindGroupLayout]
+          }),
+          compute: {
+            module: computeShaderModule,
+            entryPoint: 'computeMain'
+          }
+        });
+
+        const computeBindGroup = device.createBindGroup({
+          layout: computeBindGroupLayout,
+          entries: [{
+            binding: 0,
+            resource: { buffer: computeBuffer }
+          }]
+        });
+
         // Animation variables
         let rotation = 0;
         let lastTime = 0;
@@ -343,26 +394,50 @@ document.body.appendChild(stats.dom);
           // Create command encoder
           const encoder = device.createCommandEncoder();
 
-          // Begin CPU timing
+          // Begin CPU timing (also resets the per-frame timestamp slot allocator)
           stats.begin();
 
-          // Begin render pass with timestampWrites for GPU timing
-          const pass = encoder.beginRenderPass({
+          // Compute pass - timed into the CPT panel
+          const computePass = encoder.beginComputePass({
+            timestampWrites: stats.getTimestampWrites('compute')
+          });
+          computePass.setPipeline(computePipeline);
+          computePass.setBindGroup(0, computeBindGroup);
+          computePass.dispatchWorkgroups(1);
+          computePass.end();
+
+          const textureView = context.getCurrentTexture().createView();
+
+          // First render pass - clears canvas + draws the triangle
+          const pass1 = encoder.beginRenderPass({
             colorAttachments: [{
-              view: context.getCurrentTexture().createView(),
+              view: textureView,
               loadOp: 'clear',
               storeOp: 'store',
               clearValue: { r: 0.1, g: 0.1, b: 0.1, a: 1.0 }
             }],
-            timestampWrites: stats.getTimestampWrites()
+            timestampWrites: stats.getTimestampWrites('render')
           });
+          pass1.setPipeline(pipeline);
+          pass1.setBindGroup(0, bindGroup);
+          pass1.draw(3);
+          pass1.end();
 
-          pass.setPipeline(pipeline);
-          pass.setBindGroup(0, bindGroup);
-          pass.draw(3);
-          pass.end();
+          // Second render pass - overlays another triangle (loads existing contents)
+          const pass2 = encoder.beginRenderPass({
+            colorAttachments: [{
+              view: textureView,
+              loadOp: 'load',
+              storeOp: 'store'
+            }],
+            timestampWrites: stats.getTimestampWrites('render')
+          });
+          pass2.setPipeline(pipeline);
+          pass2.setBindGroup(0, bindGroup);
+          pass2.draw(3);
+          pass2.end();
 
-          // End timing and resolve GPU timestamps
+          // End timing and resolve all timestamp pairs used this frame
           stats.end(encoder);
 
           // Submit commands

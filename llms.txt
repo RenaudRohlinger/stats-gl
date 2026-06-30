@@ -102,6 +102,46 @@ function animate() {
 animate();
 ```
 
+### Multi-pass / compute-pass timing
+
+Each `getTimestampWrites(type)` call allocates one timestamp pair from the per-frame
+budget. `'render'` pairs sum into the GPU panel, `'compute'` pairs into the CPT panel.
+Counters reset on `stats.begin()`.
+
+```js
+const stats = new Stats({ trackGPU: true, trackCPT: true });
+stats.init(device);
+
+function frame() {
+  stats.begin();
+  const encoder = device.createCommandEncoder();
+
+  const cp = encoder.beginComputePass({
+    timestampWrites: stats.getTimestampWrites('compute')
+  });
+  // dispatchWorkgroups...
+  cp.end();
+
+  const rp1 = encoder.beginRenderPass({
+    colorAttachments: [...],
+    timestampWrites: stats.getTimestampWrites('render')
+  });
+  // shadow pass...
+  rp1.end();
+
+  const rp2 = encoder.beginRenderPass({
+    colorAttachments: [...],
+    timestampWrites: stats.getTimestampWrites('render')
+  });
+  // main pass...
+  rp2.end();
+
+  stats.end(encoder);
+  device.queue.submit([encoder.finish()]);
+  stats.update();
+}
+```
+
 ## 5. Web Worker + OffscreenCanvas
 
 ### Main Thread
@@ -246,12 +286,13 @@ for (const { name, bitmap } of captures) {
 | trackFPS | true | FPS/CPU panels |
 | trackGPU | false | GPU timing |
 | trackHz | false | Refresh rate |
-| trackCPT | false | Compute timing (WebGPU) |
+| trackCPT | false | Compute-pass timing (WebGPU). Adds CPT panel. |
 | logsPerSecond | 4 | Text update rate |
 | graphsPerSecond | 30 | Graph update rate |
 | samplesLog | 40 | Text averaging samples |
 | samplesGraph | 10 | Graph averaging samples |
 | precision | 2 | Decimal places |
+| maxTimestampPairs | 2048 | Max begin/end pairs per frame (native WebGPU) |
 | minimal | false | Click-to-cycle mode |
 | horizontal | true | Panel layout |
 | mode | 0 | Initial panel |
@@ -261,12 +302,13 @@ for (const { name, bitmap } of captures) {
 ### Stats (default export)
 
 ```js
-stats.init(renderer)              // Init with Three.js renderer, canvas, or GPUDevice
-stats.begin()                     // Start timing
-stats.end(encoder?)               // End timing (pass encoder for native WebGPU)
-stats.update()                    // Update display
-stats.getTimestampWrites()        // Get timestampWrites for native WebGPU render pass
-stats.setData({ fps, cpu, gpu })  // External data (workers)
+stats.init(renderer)                  // Init with Three.js renderer, canvas, or GPUDevice
+stats.begin()                         // Start timing
+stats.end(encoder?)                   // End timing (pass encoder for native WebGPU)
+stats.update()                        // Update display
+stats.getTimestampWrites('render')    // Allocate render-pass timestamp pair
+stats.getTimestampWrites('compute')   // Allocate compute-pass timestamp pair
+stats.setData({ fps, cpu, gpu })      // External data (workers)
 stats.addPanel(panel)             // Custom panel
 stats.addTexturePanel(name)       // Texture preview
 stats.setTexture(name, target)    // Set texture source
@@ -277,12 +319,12 @@ stats.dispose()                   // Cleanup
 ### StatsProfiler (headless for workers)
 
 ```js
-profiler.init(gl | device)        // Init with GL context or GPUDevice
-profiler.begin()                  // Start timing
-profiler.end(encoder?)            // End timing (pass encoder for native WebGPU)
-profiler.update()                 // Process data
-profiler.getTimestampWrites()     // Get timestampWrites for native WebGPU
-profiler.getData()                // { fps, cpu, gpu, gpuCompute }
+profiler.init(gl | device)            // Init with GL context or GPUDevice
+profiler.begin()                      // Start timing
+profiler.end(encoder?)                // End timing (pass encoder for native WebGPU)
+profiler.update()                     // Process data
+profiler.getTimestampWrites(type?)    // 'render' (default) or 'compute' pair
+profiler.getData()                    // { fps, cpu, gpu, gpuCompute }
 profiler.captureTexture(src, id)  // Capture to ImageBitmap
 profiler.dispose()                // Cleanup
 ```
