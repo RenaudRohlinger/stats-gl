@@ -100,6 +100,7 @@ export class StatsCore {
   protected renderCount = 0;
 
   protected cpuStartTime = 0;
+  protected isRunningCPUProfiling = false;
   protected totalCpuDuration = 0;
   protected totalGpuDuration = 0;
   protected totalGpuDurationCompute = 0;
@@ -482,10 +483,14 @@ export class StatsCore {
 
   protected beginProfiling(): void {
     this.cpuStartTime = performance.now();
+    this.isRunningCPUProfiling = true;
   }
 
   protected endProfiling(): void {
-    this.totalCpuDuration += performance.now() - this.cpuStartTime;
+    if (this.isRunningCPUProfiling) {
+      this.totalCpuDuration += performance.now() - this.cpuStartTime;
+      this.isRunningCPUProfiling = false;
+    }
   }
 
   protected calculateFps(): number {
