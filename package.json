@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@types/three": "*",
+    "@webgpu/types": "^0.1.71",
     "fs-extra": "^11.2.0",
     "path": "^0.12.7",
     "rollup": "^4.24.3",
