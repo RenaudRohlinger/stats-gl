@@ -1,6 +1,6 @@
 {
   "name": "stats-gl",
-  "version": "4.2.1",
+  "version": "4.2.3",
   "type": "module",
   "author": "Renaud ROHLINGER (https://github.com/RenaudRohlinger)",
   "homepage": "https://github.com/RenaudRohlinger/stats-gl",
@@ -26,6 +26,7 @@
   },
   "sideEffects": false,
   "scripts": {
+    "test": "node ./scripts/test-stats-gl-node.mjs",
     "dev": "vite dev --debug",
     "serve": "vite serve",
     "build": "tsc && vite build && rollup -c && node ./scripts/copyBuild.js",

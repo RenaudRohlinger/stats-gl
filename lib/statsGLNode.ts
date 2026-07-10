@@ -16,6 +16,18 @@ interface StatsGLNodeData {
   node: any;
 }
 
+function nodeToCaptureOutput(node: any, Fn: any, nodeObject: any, vec3: any, vec4: any): any {
+  node = nodeObject(node);
+
+  return Fn((builder: any) => {
+    const nodeType = node.getNodeType(builder);
+
+    return builder.getTypeLength(nodeType) === 1
+      ? vec4(node, node, node, 1)
+      : vec4(vec3(node), 1);
+  })();
+}
+
 /**
  * Manages TSL node capture for stats-gl (used internally)
  */
@@ -57,7 +69,7 @@ export class StatsGLCapture {
     if (this.nodes.has(name)) return this.nodes.get(name)!;
 
     const { CanvasTarget, NodeMaterial, QuadMesh, NoToneMapping, LinearSRGBColorSpace } = this.THREE;
-    const { renderOutput, vec3, vec4 } = this.THREE;
+    const { Fn, nodeObject, renderOutput, vec3, vec4 } = this.THREE;
 
     const canvas = typeof OffscreenCanvas !== 'undefined'
       ? new OffscreenCanvas(this.width, this.height)
@@ -72,7 +84,7 @@ export class StatsGLCapture {
 
     const material = new NodeMaterial();
     material.outputNode = renderOutput(
-      vec4(vec3(targetNode), 1),
+      nodeToCaptureOutput(targetNode, Fn, nodeObject, vec3, vec4),
       NoToneMapping,
       LinearSRGBColorSpace
     );

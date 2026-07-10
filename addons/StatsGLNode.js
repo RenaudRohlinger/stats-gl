@@ -15,11 +15,25 @@
  *   }
  */
 
-import { addMethodChaining, nodeObject, vec3, vec4 } from 'three/tsl';
+import { addMethodChaining, Fn, nodeObject, vec3, vec4 } from 'three/tsl';
 import { CanvasTarget, LinearSRGBColorSpace, NodeMaterial, NoToneMapping, QuadMesh, RendererUtils } from 'three/webgpu';
 
 // Detect worker environment
 const isWorker = typeof document === 'undefined';
+
+function nodeToCaptureOutput(node) {
+  node = nodeObject(node);
+
+  // TSL resolves the final type while building. Inspecting it here handles
+  // wrappers such as VarNode/ContextNode as well as direct SplitNode swizzles.
+  return Fn((builder) => {
+    const nodeType = node.getNodeType(builder);
+
+    return builder.getTypeLength(nodeType) === 1
+      ? vec4(node, node, node, 1)
+      : vec4(vec3(node), 1);
+  })();
+}
 
 /**
  * Capture data for TSL node rendering
@@ -62,8 +76,9 @@ class CaptureData {
       this.canvasTarget.setPixelRatio(isWorker ? 1 : (window.devicePixelRatio || 1));
       this.canvasTarget.setSize(this.size, this.size, false);
 
-      // Create material - use vec4(vec3(node), 1) like Inspector does
-      let output = vec4(vec3(captureNode), 1);
+      // Create material. Single-channel swizzles need explicit replication;
+      // vec3(splitNode) can compile to black in the standalone capture pass.
+      let output = nodeToCaptureOutput(captureNode);
       output = output.context({ inspector: true });
 
       this.material = new NodeMaterial();
